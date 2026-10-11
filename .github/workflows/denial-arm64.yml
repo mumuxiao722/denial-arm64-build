@@ -14,10 +14,12 @@ on:
         type: boolean
         default: false
 
-  push:
-    branches: [ main ]
-    paths:
-      - 'patches/**'
+  # A cold Flutter engine build costs over 40 minutes on the runner, so a push
+  # to main should not start one on its own. Run this workflow by hand.
+  # push:
+  #   branches: [ main ]
+  #   paths:
+  #     - 'patches/**'
 
 # This repository tracks one Denial tag at a time. It is a repository variable
 # rather than a top-level env entry because these values are needed inside step
