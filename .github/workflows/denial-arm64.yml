@@ -9,14 +9,6 @@ name: Build Denial (ARM64)
 on:
   workflow_dispatch:
     inputs:
-      denial_ref:
-        description: 'Denial tag or ref'
-        type: string
-        default: 'v0.5.0'
-      engine_cache:
-        description: 'Restore the Flutter engine cache'
-        type: boolean
-        default: true
       publish_release:
         description: 'Publish a GitHub release with the packages'
         type: boolean
@@ -27,9 +19,16 @@ on:
     paths:
       - 'patches/**'
 
+# This repository tracks one Denial tag at a time. It is a repository variable
+# rather than a top-level env entry because these values are needed inside step
+# `with:` blocks -- ref and cache keys -- and the env context is not available
+# there.
+#
+#   gh variable set DENIAL_REF --body v0.6.0
+
 jobs:
   build:
-    name: "Build (${{ inputs.denial_ref }}, ARM64)"
+    name: "Build (${{ vars.DENIAL_REF }}, ARM64)"
     runs-on: ubuntu-24.04-arm
 
     env:
@@ -42,26 +41,25 @@ jobs:
       - name: "Checkout Repo"
         uses: actions/checkout@v7
 
-      - name: "Checkout Denial (${{ inputs.denial_ref }})"
+      - name: "Checkout Denial (${{ vars.DENIAL_REF }})"
         uses: actions/checkout@v7
         with:
           repository: denialwm/denial
-          ref: ${{ inputs.denial_ref }}
+          ref: ${{ vars.DENIAL_REF }}
           path: denial
           fetch-depth: 0
           fetch-tags: true
 
       - name: "Restore Denial engine cache"
         id: engine-cache-restore
-        if: ${{ inputs.engine_cache }}
         uses: actions/cache/restore@v5
         with:
           path: |
             ${{ github.workspace }}/.denial-cache/engine/artifacts
             ${{ github.workspace }}/.denial-cache/engine/state
-          key: denial-engine-cache-${{ inputs.denial_ref }}
+          key: denial-engine-cache-${{ vars.DENIAL_REF }}
           restore-keys: |
-            denial-engine-cache-${{ inputs.denial_ref }}
+            denial-engine-cache-${{ vars.DENIAL_REF }}
 
       - name: "Restore Denial build cache"
         id: build-cache-restore
@@ -70,9 +68,9 @@ jobs:
           path: |
             ${{ github.workspace }}/.denial-cache/pc-build/package-input
             ${{ github.workspace }}/.denial-cache/pc-build/rust
-          key: denial-build-${{ inputs.denial_ref }}-
+          key: denial-build-${{ vars.DENIAL_REF }}-
           restore-keys: |
-            denial-build-${{ inputs.denial_ref }}-
+            denial-build-${{ vars.DENIAL_REF }}-
 
       - name: "Install Build Tools"
         run: |
@@ -88,15 +86,31 @@ jobs:
             libglib2.0-dev libgtk-3-dev fontconfig \
             libpolkit-agent-1-dev \
             rpm rpm2cpio libarchive-tools \
-            jq bubblewrap
+            jq bubblewrap \
+            makepkg fakeroot
 
       - name: "Add Rust toolchain"
         run: |
           rustup default stable
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
+      - name: "Make makepkg usable without a pacman database"
+        run: |
+          # Ubuntu ships makepkg from pacman-package-manager but not the pacman
+          # binary itself, so there is no database to read. makepkg treats a
+          # missing /etc/pacman.conf as "unconfigured" and refuses to run, so
+          # provide a minimal one with no repositories. package-denial-arch
+          # invokes makepkg with --nodeps, so nothing is ever resolved or
+          # installed from these.
+          sudo tee /etc/pacman.conf >/dev/null <<'EOF'
+          [options]
+          HoldPkg = pacman glibc
+          Architecture = auto
+          EOF
+          makepkg --version
+
       - name: "Patch Denial tooling for ARM64"
-        run: patches/patch-denial-arm64.sh denial
+        run: patches/denial-arm64-builder.sh denial
 
       - name: "Denial doctor (host prerequisite check)"
         run: ./tools/denial-pc doctor || true
@@ -109,6 +123,17 @@ jobs:
       - name: "Build Flutter engine (cacheable)"
         run: ./tools/denial-flutter-engine build
         working-directory: denial
+
+      # Persist the engine right after it is built. A failure anywhere below
+      # this point must not throw away the 40-plus minutes it cost.
+      - name: "Save Denial engine cache"
+        if: ${{ success() && steps.engine-cache-restore.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            ${{ github.workspace }}/.denial-cache/engine/artifacts
+            ${{ github.workspace }}/.denial-cache/engine/state
+          key: ${{ steps.engine-cache-restore.outputs.cache-primary-key }}
 
       # Everything above this point costs the engine rebuild. When the build
       # cache restored, the staged tree and binaries are already present and
@@ -124,32 +149,25 @@ jobs:
         working-directory: denial
 
       - name: "Save build cache"
-        if: ${{ always() && steps.build-cache-restore.outputs.cache-hit != 'true' }}
+        if: ${{ success() && steps.build-cache-restore.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v5
         with:
           path: |
             ${{ github.workspace }}/.denial-cache/pc-build/package-input
             ${{ github.workspace }}/.denial-cache/pc-build/rust
-          key: denial-build-${{ inputs.denial_ref }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: denial-build-${{ vars.DENIAL_REF }}-${{ github.run_id }}-${{ github.run_attempt }}
 
+      # Package and upload one distribution at a time. Each upload runs with
+      # always() so a later target failing cannot discard what already built,
+      # and each upload only reports missing files as a warning -- a target
+      # that failed for its own reason should not double up as an upload error.
       - name: "Package (Fedora RPM)"
+        id: package-fedora
         run: ./tools/denial-pc fedora-package
         working-directory: denial
 
-      - name: "Package (openSUSE RPM)"
-        run: ./tools/denial-pc opensuse-package
-        working-directory: denial
-
-      - name: "Package (Debian/Ubuntu deb)"
-        run: ./tools/denial-pc debian-package
-        working-directory: denial
-
-      - name: "Package (Alpine APK)"
-        run: ./tools/denial-pc alpine-package
-        working-directory: denial
-        continue-on-error: true
-
       - name: "Upload Denial RPM (Fedora)"
+        if: ${{ always() && steps.package-fedora.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
           name: denial-rpm-fedora-arm64
@@ -158,6 +176,7 @@ jobs:
           if-no-files-found: error
 
       - name: "Upload Denial Flutter Engine RPM (Fedora)"
+        if: ${{ always() && steps.package-fedora.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
           name: denial-flutter-engine-rpm-fedora-arm64
@@ -165,7 +184,13 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+      - name: "Package (openSUSE RPM)"
+        id: package-opensuse
+        run: ./tools/denial-pc opensuse-package
+        working-directory: denial
+
       - name: "Upload Denial RPM (openSUSE)"
+        if: ${{ always() && steps.package-opensuse.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
           name: denial-rpm-opensuse-arm64
@@ -174,6 +199,7 @@ jobs:
           if-no-files-found: error
 
       - name: "Upload Denial Flutter Engine RPM (openSUSE)"
+        if: ${{ always() && steps.package-opensuse.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
           name: denial-flutter-engine-rpm-opensuse-arm64
@@ -181,7 +207,13 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+      - name: "Package (Debian/Ubuntu deb)"
+        id: package-deb
+        run: ./tools/denial-pc debian-package
+        working-directory: denial
+
       - name: "Upload Denial deb"
+        if: ${{ always() && steps.package-deb.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
           name: denial-deb-arm64
@@ -189,7 +221,14 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+      - name: "Package (Alpine APK)"
+        id: package-alpine
+        run: ./tools/denial-pc alpine-package
+        working-directory: denial
+        continue-on-error: true
+
       - name: "Upload Denial APK"
+        if: ${{ always() && steps.package-alpine.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
           name: denial-apk-arm64
@@ -197,14 +236,25 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
-      - name: "Save Denial engine cache"
-        if: ${{ always() && steps.engine-cache-restore.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v5
+      - name: "Package (Arch pkg.tar.zst)"
+        id: package-arch
+        run: ./tools/denial-pc arch-package
+        working-directory: denial
+        env:
+          DENIAL_PC_MAKEPKG_ROOT: ${{ github.workspace }}/.denial-cache/pc-build/makepkg
+        # makepkg comes from Ubuntu's pacman-package-manager package with no
+        # pacman database behind it. Allowed to fail so an unproven packaging
+        # path cannot block the RPM, deb and APK targets.
+        continue-on-error: true
+
+      - name: "Upload Denial Arch package"
+        if: ${{ always() && steps.package-arch.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
         with:
-          path: |
-            ${{ github.workspace }}/.denial-cache/engine/artifacts
-            ${{ github.workspace }}/.denial-cache/engine/state
-          key: ${{ steps.engine-cache-restore.outputs.cache-primary-key }}
+          name: denial-arch-arm64
+          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/*.pkg.tar.zst
+          retention-days: 7
+          if-no-files-found: warn
 
   release:
     name: "Publish release"
@@ -229,6 +279,6 @@ jobs:
       - name: "Publish GitHub release"
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.denial_ref }}
+          tag_name: ${{ vars.DENIAL_REF }}
           prerelease: true
           files: packages/*
