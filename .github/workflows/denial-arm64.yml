@@ -77,35 +77,7 @@ jobs:
             libglib2.0-dev libgtk-3-dev fontconfig \
             libpolkit-agent-1-dev \
             rpm rpm2cpio libarchive-tools \
-            jq bubblewrap \
-            makepkg fakeroot \
-            sccache
-
-      # Build Denial is 57 minutes of cargo compiling a few hundred crates.
-      # Two things keep a repeat run from paying that again:
-      #
-      #  - sccache, which keys each crate on its source and flags and stores
-      #    through SCCACHE_GHA_ENABLED rather than a directory restored here.
-      #  - the cargo target directory itself, which lets cargo skip even the
-      #    work of deciding what is stale.
-      #
-      # ccache is deliberately not wired to anything. The engine cache holds a
-      # finished libflutter_engine.so, so on a hit Skia is never compiled and
-      # there is nothing for a C++ cache to hold; on a miss Skia's objects run
-      # to tens of gigabytes, past the repository quota.
-      - name: "Set up sccache"
-        run: |
-          mkdir -p "$HOME/.cache/sccache"
-          sccache --start-server
-          echo "SCCACHE_DIR=$HOME/.cache/sccache" >> "$GITHUB_ENV"
-          echo "SCCACHE_CACHE_SIZE=4G" >> "$GITHUB_ENV"
-          # Let sccache store through actions/cache rather than a directory
-          # this workflow would have to restore and save by hand.
-          echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
-          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
-
-      # sccache keeps its own store through SCCACHE_GHA_ENABLED, so there is
-      # no directory to restore here.
+            jq
 
       - name: "Add Rust toolchain"
         run: |
@@ -143,9 +115,9 @@ jobs:
 
       # The Flutter engine's Skia objects are not cached: they run to tens of
       # gigabytes, past the 10 GB repository quota. What the engine cache does
-      # hold is the finished libflutter_engine.so. Restoring a cargo target
-      # directory on top of that changed nothing measurable, so sccache carries
-      # the Rust side and there is no second cache.
+      # hold is the finished libflutter_engine.so. Neither a compiler cache nor
+      # a restored cargo target directory measurably shortened the Rust side,
+      # so the engine cache is the only one.
       - name: "Build Denial"
         run: ./tools/denial-pc build
         working-directory: denial
