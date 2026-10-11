@@ -351,10 +351,75 @@ else:
         'readonly arch_dir\n'
     )
     s = s.replace(arch_dir_anchor, arch_dir_repl, 1)
+
+    # makepkg in Ubuntu's pacman-package-manager has --packagelist but not
+    # --dir, which upstream uses to point at each package directory. Run it
+    # from inside that directory instead.
+    if "# shellcheck disable=SC2317\nrun_makepkg()" in s:
+        pass
+    elif "run_makepkg()" not in s:
+        helper = (
+            "run_makepkg() {\n"
+            "  local dir=\"$1\"\n"
+            "  shift\n"
+            "  (cd \"$dir\" && makepkg \"$@\")\n"
+            "}\n"
+            "\n"
+        )
+        helper_anchor = 'engine_package="$(makepkg --dir "$ENGINE_PACKAGE_DIR" --packagelist)"\n'
+        if helper_anchor not in s:
+            sys.exit("patch: package-denial-arch makepkg helper anchor not found")
+        s = s.replace(helper_anchor, helper + helper_anchor, 1)
+
+    makepkg_anchor = 'engine_package="$(makepkg --dir "$ENGINE_PACKAGE_DIR" --packagelist)"\n'
+    makepkg_repl = 'engine_package="$(run_makepkg "$ENGINE_PACKAGE_DIR" --packagelist)"\n'
+    if makepkg_anchor in s:
+        s = s.replace(makepkg_anchor, makepkg_repl, 1)
+
+    denial_list_anchor = 'denial_package="$(makepkg --dir "$DENIAL_PACKAGE_DIR" --packagelist)"\n'
+    denial_list_repl = 'denial_package="$(run_makepkg "$DENIAL_PACKAGE_DIR" --packagelist)"\n'
+    if denial_list_anchor in s:
+        s = s.replace(denial_list_anchor, denial_list_repl, 1)
+
+    plugin_list_anchor = '  makepkg --dir "$PLUGIN_MANAGER_PACKAGE_DIR" --packagelist\n'
+    plugin_list_repl = '  run_makepkg "$PLUGIN_MANAGER_PACKAGE_DIR" --packagelist\n'
+    if plugin_list_anchor in s:
+        s = s.replace(plugin_list_anchor, plugin_list_repl, 1)
+
+    for payload in (
+        "$STAGE_ROOT/denial-flutter-engine",
+        "$STAGE_ROOT/denial",
+        "$STAGE_ROOT/denial-plugin-manager",
+    ):
+        for lead in ("", "  "):
+            old = (
+                lead
+                + 'DENIAL_PACKAGE_PAYLOAD_ROOT="%s" makepkg \\\n' % payload
+                + lead
+                + '  --dir'
+            )
+            idx = s.find(old)
+            if idx < 0:
+                continue
+            tail_end = s.index("\n", idx + len(old))
+            rest = s[idx + len(old):tail_end]
+            s = (
+                s[:idx]
+                + lead
+                + 'DENIAL_PACKAGE_PAYLOAD_ROOT="%s" run_makepkg \\\n' % payload
+                + lead
+                + "  "
+                + rest
+                + s[tail_end:]
+            )
+            break
+        else:
+            sys.exit("patch: package-denial-arch build call not found: " + payload)
+
     mark(
         arch_packager,
         s + marker,
-        "patched package-denial-arch (engine sha directory is host-arch aware)",
+        "patched package-denial-arch (host-arch aware, makepkg --dir replaced)",
     )
 
 # ---------- packaging/arch PKGBUILDs ----------
