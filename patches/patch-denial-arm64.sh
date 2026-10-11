@@ -352,6 +352,79 @@ else:
     s = s.replace(".x86_64.rpm", ".*.rpm")
     mark(rpm, s + marker, f"patched package-denial-rpm ({n} x86_64 rpm globs widened)")
 
+# ---------- packaging/opensuse/denial.spec ----------
+# tools/package-denial-opensuse-rpm is a seven-line wrapper that sets
+# DENIAL_RPM_DISTRIBUTION=opensuse and execs package-denial-rpm, so the RPM
+# glob widening above already applies. Only the spec needs patching.
+opensuse_spec = repo / "packaging" / "opensuse" / "denial.spec"
+if patched(opensuse_spec):
+    print("packaging/opensuse/denial.spec: already patched")
+else:
+    s = opensuse_spec.read_text()
+    opensuse_anchor = "ExclusiveArch:  x86_64\n"
+    if opensuse_anchor not in s:
+        sys.exit("patch: opensuse denial.spec ExclusiveArch anchor not found")
+    s = s.replace(opensuse_anchor, "ExclusiveArch:  x86_64 aarch64\n", 1)
+    mark(
+        opensuse_spec,
+        s + marker,
+        "patched opensuse denial.spec (ExclusiveArch includes aarch64)",
+    )
+
+# ---------- tools/package-denial-deb ----------
+# The Debian adapter hardcodes amd64 in both the DEBIAN/control Architecture
+# field and the output filenames, so an ARM64 build still produces a package
+# that dpkg refuses to install. Derive the architecture the way the RPM
+# adapters already do and use it in all five places.
+deb = repo / "tools" / "package-denial-deb"
+if patched(deb):
+    print("package-denial-deb: already patched")
+else:
+    s = deb.read_text()
+    deb_arch_anchor = 'for required_command in dpkg-deb install mktemp; do\n'
+    if deb_arch_anchor not in s:
+        sys.exit("patch: package-denial-deb requirement anchor not found")
+    # Anchor on the end of the loop instead, so the case block lands outside it.
+    deb_arch_end = (
+        deb_arch_anchor
+        + "  command -v \"$required_command\" >/dev/null 2>&1 \\\n"
+        + "    || { printf 'package-denial-deb: %s is required\\n' \"$required_command\" >&2; exit 1; }\n"
+        + "done\n"
+    )
+    if deb_arch_end not in s:
+        sys.exit("patch: package-denial-deb requirement loop not found")
+    deb_arch_repl = (
+        deb_arch_end
+        + "\n"
+        + 'case "$(uname -m)" in\n'
+        + "  aarch64|arm64) DEB_ARCH=arm64 ;;\n"
+        + "  x86_64|amd64) DEB_ARCH=amd64 ;;\n"
+        + "  *) printf 'package-denial-deb: unsupported architecture\\n' >&2; exit 1 ;;\n"
+        + "esac\n"
+        + 'readonly DEB_ARCH\n'
+    )
+    s = s.replace(deb_arch_end, deb_arch_repl, 1)
+
+    control_count = s.count("printf 'Architecture: amd64\\n'")
+    if control_count == 0:
+        sys.exit("patch: package-denial-deb control Architecture field not found")
+    s = s.replace(
+        "printf 'Architecture: amd64\\n'",
+        "printf 'Architecture: %s\\n' \"$DEB_ARCH\"",
+    )
+
+    name_count = s.count("_amd64.deb")
+    if name_count == 0:
+        sys.exit("patch: package-denial-deb output filename arch not found")
+    s = s.replace("_amd64.deb", '_${DEB_ARCH}.deb')
+
+    mark(
+        deb,
+        s + marker,
+        f"patched package-denial-deb "
+        f"({control_count} control fields, {name_count} filenames use DEB_ARCH)",
+    )
+
 # ---------- tools/prepare-denial-plugin-kit ----------
 # Added upstream with the plugin kit (v0.4.4). It indexes the pinned release
 # checksum positionally, which crashes on the empty arm64 placeholder that is
