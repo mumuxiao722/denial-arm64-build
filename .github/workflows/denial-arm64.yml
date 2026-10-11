@@ -161,6 +161,26 @@ jobs:
       # always() so a later target failing cannot discard what already built,
       # and each upload only reports missing files as a warning -- a target
       # that failed for its own reason should not double up as an upload error.
+      - name: "Package (Arch pkg.tar.zst)"
+        id: package-arch
+        run: ./tools/denial-pc arch-package
+        working-directory: denial
+        env:
+          DENIAL_PC_MAKEPKG_ROOT: ${{ github.workspace }}/.denial-cache/pc-build/makepkg
+        # makepkg comes from Ubuntu's pacman-package-manager package with no
+        # pacman database behind it. Allowed to fail so an unproven packaging
+        # path cannot block the RPM, deb and APK targets.
+        continue-on-error: true
+
+      - name: "Upload Denial Arch package"
+        if: ${{ always() && steps.package-arch.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: denial-arch-arm64
+          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/*.pkg.tar.zst
+          retention-days: 7
+          if-no-files-found: warn
+
       - name: "Package (Fedora RPM)"
         id: package-fedora
         run: ./tools/denial-pc fedora-package
@@ -233,26 +253,6 @@ jobs:
         with:
           name: denial-apk-arm64
           path: ${{ github.workspace }}/.denial-cache/pc-build/packages/*.apk
-          retention-days: 7
-          if-no-files-found: warn
-
-      - name: "Package (Arch pkg.tar.zst)"
-        id: package-arch
-        run: ./tools/denial-pc arch-package
-        working-directory: denial
-        env:
-          DENIAL_PC_MAKEPKG_ROOT: ${{ github.workspace }}/.denial-cache/pc-build/makepkg
-        # makepkg comes from Ubuntu's pacman-package-manager package with no
-        # pacman database behind it. Allowed to fail so an unproven packaging
-        # path cannot block the RPM, deb and APK targets.
-        continue-on-error: true
-
-      - name: "Upload Denial Arch package"
-        if: ${{ always() && steps.package-arch.outcome == 'success' }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: denial-arch-arm64
-          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/*.pkg.tar.zst
           retention-days: 7
           if-no-files-found: warn
 
