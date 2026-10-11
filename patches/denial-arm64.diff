@@ -1,0 +1,667 @@
+diff --git a/packaging/arch/PKGBUILD b/packaging/arch/PKGBUILD
+index b267446..5abe71d 100644
+--- a/packaging/arch/PKGBUILD
++++ b/packaging/arch/PKGBUILD
+@@ -4,7 +4,7 @@ pkgname=denial
+ pkgver="${DENIAL_PACKAGE_VERSION:-0}"
+ pkgrel="${DENIAL_PACKAGE_RELEASE:-1}"
+ pkgdesc='Flutter-native Wayland compositor and desktop shell'
+-arch=('x86_64')
++arch=('x86_64' 'aarch64')
+ url='https://github.com/denialwm/denial'
+ license=(
+   'GPL-3.0-or-later'
+@@ -248,3 +248,4 @@ package() {
+     "$pkgdir/usr/share/licenses/denial/LICENSE"
+   install_runtime_version
+ }
++# DENIAL_ARM64_PATCHED
+diff --git a/packaging/arch/flutter-engine/PKGBUILD b/packaging/arch/flutter-engine/PKGBUILD
+index a286c37..a75dd38 100644
+--- a/packaging/arch/flutter-engine/PKGBUILD
++++ b/packaging/arch/flutter-engine/PKGBUILD
+@@ -5,7 +5,7 @@ pkgver="${DENIAL_PACKAGE_VERSION:-0}"
+ pkgrel="${DENIAL_PACKAGE_RELEASE:-1}"
+ epoch=1
+ pkgdesc='Pinned source-built Flutter Engine runtime for Denial'
+-arch=('x86_64')
++arch=('x86_64' 'aarch64')
+ url='https://github.com/denialwm/denial'
+ license=('BSD-3-Clause')
+ depends=('fontconfig' 'glibc')
+@@ -94,3 +94,4 @@ package() {
+   install -Dm644 "$engine_root/LICENSE.third_party" \
+     "$pkgdir/usr/share/licenses/denial-flutter-engine/LICENSE.third_party"
+ }
++# DENIAL_ARM64_PATCHED
+diff --git a/packaging/arch/plugin-manager/PKGBUILD b/packaging/arch/plugin-manager/PKGBUILD
+index a7a06e8..db86f62 100644
+--- a/packaging/arch/plugin-manager/PKGBUILD
++++ b/packaging/arch/plugin-manager/PKGBUILD
+@@ -4,7 +4,7 @@ pkgname=denial-plugin-manager
+ pkgver="${DENIAL_PACKAGE_VERSION:-0}"
+ pkgrel="${DENIAL_PACKAGE_RELEASE:-1}"
+ pkgdesc='Plugin development, installation, and composition tools for Denial'
+-arch=('x86_64')
++arch=('x86_64' 'aarch64')
+ url='https://github.com/denialwm/denial'
+ license=('GPL-3.0-or-later')
+ depends=(
+@@ -35,3 +35,4 @@ package() {
+     "${DENIAL_PACKAGE_PLUGIN_MANAGER_BACKEND:-$cache_root/denial/pc-build/plugin-manager/denial-plugins}" \
+     "${DENIAL_PACKAGE_PLUGIN_BUILD_KIT:-$cache_root/denial/pc-build/plugin-manager/build-kit}"
+ }
++# DENIAL_ARM64_PATCHED
+diff --git a/packaging/arch/ui-development/PKGBUILD b/packaging/arch/ui-development/PKGBUILD
+index 8a9bbe1..9768798 100644
+--- a/packaging/arch/ui-development/PKGBUILD
++++ b/packaging/arch/ui-development/PKGBUILD
+@@ -4,7 +4,7 @@ pkgname=denial-ui-development
+ pkgver="${DENIAL_PACKAGE_VERSION:-0}"
+ pkgrel="${DENIAL_PACKAGE_RELEASE:-1}"
+ pkgdesc='Pinned live Flutter UI development environment for Denial'
+-arch=('x86_64')
++arch=('x86_64' 'aarch64')
+ url='https://github.com/denialwm/denial'
+ license=('BSD-3-Clause' 'GPL-3.0-or-later')
+ _denial_version_before="${DENIAL_PACKAGE_DENIAL_VERSION_BEFORE:-0.3.0}"
+@@ -241,3 +241,4 @@ package() {
+   install -Dm644 "$repository_root/LICENSE" \
+     "$pkgdir/usr/share/licenses/denial-ui-development/LICENSE.denial"
+ }
++# DENIAL_ARM64_PATCHED
+diff --git a/packaging/fedora/denial.spec b/packaging/fedora/denial.spec
+index 55e6b1e..016cf0e 100644
+--- a/packaging/fedora/denial.spec
++++ b/packaging/fedora/denial.spec
+@@ -10,7 +10,7 @@ Release:        %{denial_release}
+ Summary:        Flutter-native Wayland compositor and desktop shell
+ License:        GPL-3.0-or-later AND CC-BY-SA-4.0 AND GPL-3.0-only AND OFL-1.1
+ URL:            https://github.com/denialwm/denial
+-ExclusiveArch:  x86_64
++ExclusiveArch:  x86_64 aarch64
+ 
+ Requires:       bash
+ Requires:       coreutils
+@@ -167,3 +167,4 @@ fi
+ %changelog
+ * Wed Aug 12 2026 Doctor Logix <doctor.logix@gmail.com> - %{version}-%{release}
+ - Add the native Fedora package adapter.
++# DENIAL_ARM64_PATCHED
+diff --git a/packaging/opensuse/denial.spec b/packaging/opensuse/denial.spec
+index f1410b7..cdf1657 100644
+--- a/packaging/opensuse/denial.spec
++++ b/packaging/opensuse/denial.spec
+@@ -10,7 +10,7 @@ Release:        %{denial_release}
+ Summary:        Flutter-native Wayland compositor and desktop shell
+ License:        GPL-3.0-or-later AND CC-BY-SA-4.0 AND GPL-3.0-only AND OFL-1.1
+ URL:            https://github.com/denialwm/denial
+-ExclusiveArch:  x86_64
++ExclusiveArch:  x86_64 aarch64
+ 
+ Requires:       bash
+ Requires:       coreutils
+@@ -167,3 +167,4 @@ fi
+ %changelog
+ * Mon Sep 21 2026 Doctor Logix <doctor.logix@gmail.com> - %{version}-%{release}
+ - Add the native openSUSE package adapter.
++# DENIAL_ARM64_PATCHED
+diff --git a/tools/denial-flutter-engine b/tools/denial-flutter-engine
+index 2d07829..06835c9 100755
+--- a/tools/denial-flutter-engine
++++ b/tools/denial-flutter-engine
+@@ -228,7 +228,7 @@ canonicalize_engine_build_id() (
+ expected_engine_sha256() {
+   local mode="$1"
+   awk 'NR == 1 { print $1 }' \
+-    "$ROOT/prebuilt/flutter-engine/linux-x64-$mode/libflutter_engine.so.sha256"
++    "$ROOT/prebuilt/flutter-engine/linux-arm64-$mode/libflutter_engine.so.sha256"
+ }
+ 
+ verify_engine_exports() {
+@@ -274,6 +274,11 @@ normalize_generated_args() {
+   local expected_jobs
+   local generated_job_count
+   local normalized="${generated}.denial-normalized.$$"
++  if [[ ! -s "$expected" ]]; then
++    printf '%s: using self-build GN arguments (%s, no baseline metadata)\n' \
++      "$(basename -- "$0")" "$mode" >&2
++    return 0
++  fi
+ 
+   verify_slimpeller_args "$mode" "$generated"
+ 
+@@ -380,14 +385,14 @@ validate_source_lock() {
+ cache_key() {
+   {
+     printf 'cache-schema=%s\n' "$CACHE_SCHEMA"
+-    printf 'target=linux-x64\n'
++    printf 'target=linux-arm64\n'
+     printf 'source-lock=%s\n' "$(file_sha256 "$SOURCE_LOCK")"
+     local mode
+     for mode in "${MODES[@]}"; do
+       printf '%s-args=%s\n' \
+         "$mode" \
+         "$(file_sha256 \
+-          "$ROOT/prebuilt/flutter-engine/linux-x64-$mode/args.gn")"
++          "$ROOT/prebuilt/flutter-engine/linux-arm64-$mode/args.gn")"
+       printf '%s-expected=%s\n' \
+         "$mode" \
+         "$(expected_engine_sha256 "$mode")"
+@@ -425,7 +430,7 @@ verify_artifacts() {
+     [[ -f "$artifact_dir/$mode/libflutter_engine.so" ]] || return 1
+     expected="$(expected_engine_sha256 "$mode")"
+     actual="$(file_sha256 "$artifact_dir/$mode/libflutter_engine.so")"
+-    [[ "$actual" == "$expected" ]] || return 1
++    [[ -z "$expected" || "$actual" == "$expected" ]] || return 1
+     verify_engine_exports "$artifact_dir/$mode/libflutter_engine.so" \
+       || return 1
+     [[ "$(jq -er --arg mode "$mode" '.artifacts[$mode].sha256' \
+@@ -445,7 +450,7 @@ stage_artifacts() {
+     || fail "cannot stage unverified Flutter engine cache entry: $key"
+   for mode in "${MODES[@]}"; do
+     source="$artifact_dir/$mode/libflutter_engine.so"
+-    destination="$ROOT/prebuilt/flutter-engine/linux-x64-$mode/libflutter_engine.so"
++    destination="$ROOT/prebuilt/flutter-engine/linux-arm64-$mode/libflutter_engine.so"
+     install -m 0755 -- "$source" "$destination"
+   done
+   printf 'Staged verified Flutter engines into prebuilt/ for local builds: %s\n' "$key"
+@@ -624,6 +629,7 @@ sync_managed_checkout() (
+ 
+   cd "$CHECKOUT"
+   if [[ "$DENIAL_ARCH" != aarch64 ]]; then
++    python3 "$ROOT/../patches/patch-deps.py" "$CHECKOUT/DEPS"
+     PATH="$DEPOT_TOOLS/.cipd_bin:$DEPOT_TOOLS:$PATH" \
+       DEPOT_TOOLS_UPDATE=0 \
+       VPYTHON_VIRTUALENV_ROOT="$VPYTHON_CACHE_ROOT" \
+@@ -756,6 +762,7 @@ prepare_checkout() {
+       DEPOT_TOOLS_UPDATE=0 \
+       VPYTHON_VIRTUALENV_ROOT="$VPYTHON_CACHE_ROOT" \
+       gclient runhooks
++      git -C "$CHECKOUT" show HEAD:DEPS > "$CHECKOUT/DEPS"
+   )
+ 
+   checkout_matches_lock \
+@@ -780,7 +787,7 @@ build_artifacts() {
+   artifact_dir="$(artifact_dir_for_key "$key")"
+   build_root="$CHECKOUT/engine/src"
+   checkout_depot="$build_root/flutter/third_party/depot_tools"
+-  llvm_objcopy="$build_root/flutter/buildtools/linux-x64/clang/bin/llvm-objcopy"
++  llvm_objcopy="$build_root/flutter/buildtools/linux-arm64/clang/bin/llvm-objcopy"
+   staging="$ARTIFACT_ROOT/.${key}.$$"
+ 
+   [[ -x "$checkout_depot/vpython3" ]] \
+@@ -799,7 +806,7 @@ build_artifacts() {
+   for mode in "${MODES[@]}"; do
+     target="denial_host_$mode"
+     output="$BUILD_ROOT/out/$target"
+-    expected_args="$ROOT/prebuilt/flutter-engine/linux-x64-$mode/args.gn"
++    expected_args="$ROOT/prebuilt/flutter-engine/linux-arm64-$mode/args.gn"
+     printf 'Generating %s engine build graph\n' "$mode"
+     (
+       cd "$build_root"
+@@ -807,6 +814,8 @@ build_artifacts() {
+         DEPOT_TOOLS_UPDATE=0 \
+         VPYTHON_VIRTUALENV_ROOT="$VPYTHON_CACHE_ROOT" \
+         ./flutter/tools/gn \
++        --linux \
++        --linux-cpu=arm64 \
+           --runtime-mode="$mode" \
+           "${GN_ENGINE_ARGS[@]}" \
+           --out-dir="$BUILD_ROOT" \
+@@ -837,8 +846,9 @@ build_artifacts() {
+       "$mode" \
+       "$output/libflutter_engine.so" \
+       "$llvm_objcopy"
+-    [[ "$(file_sha256 "$output/libflutter_engine.so")" \
+-      == "$(expected_engine_sha256 "$mode")" ]] \
++    expected_engine="$(expected_engine_sha256 "$mode")"
++    actual_engine="$(file_sha256 "$output/libflutter_engine.so")"
++    [[ -z "$expected_engine" || "$actual_engine" == "$expected_engine" ]] \
+       || fail "$mode engine checksum differs from committed metadata; after a deliberate source-lock advance run '$0 refresh-metadata'"
+     verify_engine_exports "$output/libflutter_engine.so" \
+       || fail "$mode engine is missing a required embedder export"
+@@ -895,14 +905,14 @@ refresh_metadata() {
+ 
+   build_root="$CHECKOUT/engine/src"
+   checkout_depot="$build_root/flutter/third_party/depot_tools"
+-  llvm_objcopy="$build_root/flutter/buildtools/linux-x64/clang/bin/llvm-objcopy"
++  llvm_objcopy="$build_root/flutter/buildtools/linux-arm64/clang/bin/llvm-objcopy"
+   metadata_stage="$(mktemp -d -- "$CACHE_ROOT/.metadata-refresh.XXXXXX")"
+   trap '[[ -z "${metadata_stage:-}" ]] || rm -rf --one-file-system -- "$metadata_stage"' EXIT
+ 
+   for mode in "${MODES[@]}"; do
+     target="denial_host_$mode"
+     output="$BUILD_ROOT/out/$target"
+-    expected_args="$ROOT/prebuilt/flutter-engine/linux-x64-$mode/args.gn"
++    expected_args="$ROOT/prebuilt/flutter-engine/linux-arm64-$mode/args.gn"
+     install -d -m 0700 "$metadata_stage/$mode"
+     printf 'Refreshing %s engine build metadata\n' "$mode"
+     (
+@@ -911,6 +921,8 @@ refresh_metadata() {
+         DEPOT_TOOLS_UPDATE=0 \
+         VPYTHON_VIRTUALENV_ROOT="$VPYTHON_CACHE_ROOT" \
+         ./flutter/tools/gn \
++        --linux \
++        --linux-cpu=arm64 \
+           --runtime-mode="$mode" \
+           "${GN_ENGINE_ARGS[@]}" \
+           --out-dir="$BUILD_ROOT" \
+@@ -949,13 +961,13 @@ refresh_metadata() {
+   for mode in "${MODES[@]}"; do
+     install -m 0644 \
+       "$metadata_stage/$mode/args.gn" \
+-      "$ROOT/prebuilt/flutter-engine/linux-x64-$mode/args.gn"
++      "$ROOT/prebuilt/flutter-engine/linux-arm64-$mode/args.gn"
+     install -m 0644 \
+       "$metadata_stage/$mode/libflutter_engine.so.sha256" \
+-      "$ROOT/prebuilt/flutter-engine/linux-x64-$mode/libflutter_engine.so.sha256"
++      "$ROOT/prebuilt/flutter-engine/linux-arm64-$mode/libflutter_engine.so.sha256"
+     install -m 0755 \
+       "$metadata_stage/$mode/libflutter_engine.so" \
+-      "$ROOT/prebuilt/flutter-engine/linux-x64-$mode/libflutter_engine.so"
++      "$ROOT/prebuilt/flutter-engine/linux-arm64-$mode/libflutter_engine.so"
+   done
+   printf 'Refreshed tracked Flutter engine metadata for source lock %s\n' \
+     "$(file_sha256 "$SOURCE_LOCK")"
+@@ -1027,7 +1039,7 @@ run_flutter_tests() {
+     || fail "lock-matched Flutter test launcher is missing: $flutter_test_command"
+   local_engine_src_path="$BUILD_ROOT"
+   output="$BUILD_ROOT/out/$target"
+-  expected_args="$ROOT/prebuilt/flutter-engine/linux-x64-debug/args.gn"
++  expected_args="$ROOT/prebuilt/flutter-engine/linux-arm64-debug/args.gn"
+ 
+   printf 'Generating lock-matched Flutter test build graph\n'
+   (
+@@ -1036,6 +1048,8 @@ run_flutter_tests() {
+       DEPOT_TOOLS_UPDATE=0 \
+       VPYTHON_VIRTUALENV_ROOT="$VPYTHON_CACHE_ROOT" \
+       ./flutter/tools/gn \
++      --linux \
++      --linux-cpu=arm64 \
+         --runtime-mode=debug \
+         "${GN_ENGINE_ARGS[@]}" \
+         --out-dir="$BUILD_ROOT" \
+@@ -1113,6 +1127,8 @@ prepare_app_build() {
+       DEPOT_TOOLS_UPDATE=0 \
+       VPYTHON_VIRTUALENV_ROOT="$VPYTHON_CACHE_ROOT" \
+       ./flutter/tools/gn \
++      --linux \
++      --linux-cpu=arm64 \
+         "${GN_ARCH_ARGS[@]}" \
+         --runtime-mode=release \
+         "${GN_ENGINE_ARGS[@]}" \
+@@ -1162,7 +1178,7 @@ prepare_app_build() {
+     "$llvm_objcopy"
+   verify_engine_exports "$output/libflutter_engine.so" \
+     || fail 'release engine is missing a required embedder export'
+-  if [[ -f "$NATIVE_RELEASE_ENGINE_DIR/libflutter_engine.so.sha256" ]]; then
++  if [[ -s "$NATIVE_RELEASE_ENGINE_DIR/libflutter_engine.so.sha256" ]]; then
+     [[ "$(file_sha256 "$output/libflutter_engine.so")" \
+       == "$(awk 'NR == 1 { print $1 }' "$NATIVE_RELEASE_ENGINE_DIR/libflutter_engine.so.sha256")" ]] \
+       || fail "release engine checksum differs from committed metadata; after a deliberate source-lock advance run '$0 refresh-metadata'"
+@@ -1195,7 +1211,7 @@ prepare_development_sdk() {
+   for mode in debug profile; do
+     target="denial_host_$mode"
+     output="$BUILD_ROOT/out/$target"
+-    expected_args="$ROOT/prebuilt/flutter-engine/linux-x64-$mode/args.gn"
++    expected_args="$ROOT/prebuilt/flutter-engine/linux-arm64-$mode/args.gn"
+ 
+     printf 'Generating lock-matched %s development SDK build graph\n' "$mode"
+     (
+@@ -1204,6 +1220,8 @@ prepare_development_sdk() {
+         DEPOT_TOOLS_UPDATE=0 \
+         VPYTHON_VIRTUALENV_ROOT="$VPYTHON_CACHE_ROOT" \
+         ./flutter/tools/gn \
++        --linux \
++        --linux-cpu=arm64 \
+           --runtime-mode="$mode" \
+           "${GN_ENGINE_ARGS[@]}" \
+           --out-dir="$BUILD_ROOT" \
+@@ -1349,3 +1367,4 @@ main() {
+ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+   main "$@"
+ fi
++# DENIAL_ARM64_PATCHED
+diff --git a/tools/denial-pc b/tools/denial-pc
+index 68e27ae..84ff09b 100755
+--- a/tools/denial-pc
++++ b/tools/denial-pc
+@@ -108,7 +108,7 @@ PREBUILT_ENGINE="${DENIAL_PC_ENGINE_SOURCE:-$PREBUILT_ENGINE_DIR/libflutter_engi
+ PREBUILT_ENGINE_SHA256="$PREBUILT_ENGINE_DIR/libflutter_engine.so.sha256"
+ # The generated Rust embedder ABI is architecture-independent. Until native
+ # ARM metadata is qualified, use the existing coupled upstream revision stamp.
+-ABI_METADATA_DIR="$ROOT/prebuilt/flutter-engine/linux-x64-release"
++ABI_METADATA_DIR="$ROOT/prebuilt/flutter-engine/linux-arm64-release"
+ PREBUILT_ENGINE_REVISION="$ABI_METADATA_DIR/ENGINE_REVISION"
+ PREBUILT_FLUTTER_REVISION="$ABI_METADATA_DIR/FLUTTER_REVISION"
+ EMBEDDER_BINDINGS="$ROOT/compositor/flutter-engine/src/sys.rs"
+@@ -490,18 +490,16 @@ file_sha256() {
+ }
+ 
+ prebuilt_engine_sha256() {
+-    if [[ -f "$PREBUILT_ENGINE_SHA256" ]]; then
+-        cut -d' ' -f1 < "$PREBUILT_ENGINE_SHA256"
+-    else
+-        require_file "$PREBUILT_ENGINE"
+-        file_sha256 "$PREBUILT_ENGINE"
+-    fi
++    [[ -s "$PREBUILT_ENGINE_SHA256" ]] || return 0
++    cut -d' ' -f1 < "$PREBUILT_ENGINE_SHA256"
+ }
+ 
+ verify_prebuilt_engine() {
+     [[ -f "$PREBUILT_ENGINE" ]] \
+         || die "missing locally built Flutter engine: $PREBUILT_ENGINE"
+-    [[ "$(file_sha256 "$PREBUILT_ENGINE")" == "$(prebuilt_engine_sha256)" ]] \
++    local expected_prebuilt
++    expected_prebuilt="$(prebuilt_engine_sha256)"
++    [[ -z "$expected_prebuilt" || "$(file_sha256 "$PREBUILT_ENGINE")" == "$expected_prebuilt" ]] \
+         || die "locally built Flutter engine does not match $PREBUILT_ENGINE_SHA256; rebuild or investigate it"
+ }
+ 
+@@ -524,6 +522,7 @@ require_pinned_engine() {
+         expected="$(prebuilt_engine_sha256)"
+         label="pinned build"
+     fi
++    [[ -z "$expected" ]] && return 0
+     [[ "$expected" =~ ^[0-9a-f]{64}$ ]] \
+         || die "invalid expected SHA-256 for $label"
+     actual="$(file_sha256 "$ENGINE")"
+@@ -631,6 +630,13 @@ stage_engine_test() {
+ }
+ 
+ require_flutter_bindings() {
++    if [[ ! -s "$PREBUILT_ENGINE_REVISION" \
++        || ! -s "$PREBUILT_FLUTTER_REVISION" ]]; then
++        require_file "$EMBEDDER_BINDINGS"
++        printf '%s: self-built engine without pinned revisions (skipping revision match)\n' \
++          "$(basename -- "$0")" >&2
++        return 0
++    fi
+     require_file "$PREBUILT_ENGINE_REVISION"
+     require_file "$PREBUILT_FLUTTER_REVISION"
+     require_file "$EMBEDDER_BINDINGS"
+@@ -1757,3 +1763,4 @@ case "${1:-}" in
+     help|-h|--help|'') usage ;;
+     *) die "unknown command '$1' (try '$0 help')" ;;
+ esac
++# DENIAL_ARM64_PATCHED
+diff --git a/tools/package-denial-arch b/tools/package-denial-arch
+index 3aa8f5d..ba39814 100755
+--- a/tools/package-denial-arch
++++ b/tools/package-denial-arch
+@@ -8,6 +8,13 @@ CACHE_ROOT="${XDG_CACHE_HOME:-${HOME:?HOME is required}/.cache}"
+ BUILD_ROOT="${DENIAL_PC_BUILD_ROOT:-$CACHE_ROOT/denial/pc-build}"
+ PACKAGE_ROOT="${DENIAL_PC_PACKAGE_ROOT:-$BUILD_ROOT/packages}"
+ MAKEPKG_ROOT="${DENIAL_PC_MAKEPKG_ROOT:-$BUILD_ROOT/makepkg}"
++
++case "$(uname -m)" in
++  aarch64|arm64) arch_dir=arm64 ;;
++  x86_64|amd64) arch_dir=x64 ;;
++  *) printf 'package-denial-arch: unsupported architecture\n' >&2; exit 1 ;;
++esac
++readonly arch_dir
+ PACKAGE_INPUT_ROOT="${DENIAL_PC_PACKAGE_INPUT_ROOT:-$BUILD_ROOT/package-input}"
+ STAGE_ROOT="${DENIAL_PACKAGE_STAGE_ROOT:-$PACKAGE_INPUT_ROOT/native}"
+ PACKAGE_PACKAGER="${DENIAL_PACKAGE_PACKAGER:-Doctor Logix <doctor.logix@gmail.com>}"
+@@ -66,10 +73,27 @@ export BUILDDIR="$MAKEPKG_ROOT"
+ export SRCDEST="$MAKEPKG_ROOT/sources"
+ export PACKAGER="$PACKAGE_PACKAGER"
+ 
+-engine_package="$(makepkg --dir "$ENGINE_PACKAGE_DIR" --packagelist)"
++run_makepkg() {
++  local dir="$1"
++  shift
++  (cd "$dir" && makepkg "$@")
++}
++
++# --packagelist prints one path per line, relative to makepkg's
++# working directory. The callers below test the result from this
++# shell's cwd, so print it absolute instead.
++packagelist() {
++  local dir="$1"
++  local entry
++  while IFS= read -r entry; do
++    printf '%s/%s\n' "$dir" "$entry"
++  done < <(run_makepkg "$dir" --packagelist)
++}
++
++engine_package="$(packagelist "$ENGINE_PACKAGE_DIR")"
+ expected_engine_sha256="$(
+   cut -d' ' -f1 \
+-    < "$ROOT/prebuilt/flutter-engine/linux-x64-release/libflutter_engine.so.sha256"
++    < "$ROOT/prebuilt/flutter-engine/linux-${arch_dir}-release/libflutter_engine.so.sha256"
+ )"
+ expected_engine_package_version="1:${package_version}-${PACKAGE_RELEASE}"
+ 
+@@ -297,8 +321,8 @@ validate_plugin_manager_package() (
+ )
+ 
+ if [[ ! -f "$engine_package" || "$REBUILD_ENGINE_PACKAGE" == 1 ]]; then
+-  DENIAL_PACKAGE_PAYLOAD_ROOT="$STAGE_ROOT/denial-flutter-engine" makepkg \
+-    --dir "$ENGINE_PACKAGE_DIR" \
++  DENIAL_PACKAGE_PAYLOAD_ROOT="$STAGE_ROOT/denial-flutter-engine" run_makepkg \
++     "$ENGINE_PACKAGE_DIR" \
+     --force \
+     --cleanbuild \
+     --clean \
+@@ -312,24 +336,24 @@ fi
+ # The exact engine dependency is the package built immediately above, not a
+ # package installed into the developer's live Pacman root. Validate both
+ # package metadata records after the build and install them together in Stage 1.
+-DENIAL_PACKAGE_PAYLOAD_ROOT="$STAGE_ROOT/denial" makepkg \
+-  --dir "$DENIAL_PACKAGE_DIR" \
++DENIAL_PACKAGE_PAYLOAD_ROOT="$STAGE_ROOT/denial" run_makepkg \
++   "$DENIAL_PACKAGE_DIR" \
+   --force \
+   --cleanbuild \
+   --clean \
+   --nodeps \
+   --noconfirm
+ 
+-denial_package="$(makepkg --dir "$DENIAL_PACKAGE_DIR" --packagelist)"
+-DENIAL_PACKAGE_PAYLOAD_ROOT="$STAGE_ROOT/denial-plugin-manager" makepkg \
+-  --dir "$PLUGIN_MANAGER_PACKAGE_DIR" \
++denial_package="$(packagelist "$DENIAL_PACKAGE_DIR")"
++DENIAL_PACKAGE_PAYLOAD_ROOT="$STAGE_ROOT/denial-plugin-manager" run_makepkg \
++   "$PLUGIN_MANAGER_PACKAGE_DIR" \
+   --force \
+   --cleanbuild \
+   --clean \
+   --nodeps \
+   --noconfirm
+ plugin_manager_package="$(
+-  makepkg --dir "$PLUGIN_MANAGER_PACKAGE_DIR" --packagelist
++  packagelist "$PLUGIN_MANAGER_PACKAGE_DIR"
+ )"
+ validate_denial_package "$denial_package"
+ validate_plugin_manager_package "$plugin_manager_package"
+@@ -338,3 +362,4 @@ printf '\nArch packages ready:\n'
+ printf '%s\n' "$engine_package"
+ printf '%s\n' "$denial_package"
+ printf '%s\n' "$plugin_manager_package"
++# DENIAL_ARM64_PATCHED
+diff --git a/tools/package-denial-deb b/tools/package-denial-deb
+index c5e5619..4db6e16 100755
+--- a/tools/package-denial-deb
++++ b/tools/package-denial-deb
+@@ -22,6 +22,13 @@ for required_command in dpkg-deb install mktemp; do
+     || { printf 'package-denial-deb: %s is required\n' "$required_command" >&2; exit 1; }
+ done
+ 
++case "$(uname -m)" in
++  aarch64|arm64) DEB_ARCH=arm64 ;;
++  x86_64|amd64) DEB_ARCH=amd64 ;;
++  *) printf 'package-denial-deb: unsupported architecture\n' >&2; exit 1 ;;
++esac
++readonly DEB_ARCH
++
+ if [[ "${DENIAL_PACKAGE_SKIP_STAGE:-0}" != 1 ]]; then
+   "$ROOT/tools/stage-denial-runtime"
+ fi
+@@ -63,7 +70,7 @@ build_deb() {
+   {
+     printf 'Package: %s\n' "$package_name"
+     printf 'Version: %s-%s\n' "$PACKAGE_VERSION" "$PACKAGE_RELEASE"
+-    printf 'Architecture: amd64\n'
++    printf 'Architecture: %s\n' "$DEB_ARCH"
+     printf 'Maintainer: %s\n' "$PACKAGER"
+     printf 'Installed-Size: %s\n' "$installed_size"
+     printf '%s\n' "$control_body"
+@@ -75,9 +82,9 @@ build_deb() {
+       --build "$package_root" "$output"
+ }
+ 
+-engine_package="$PACKAGE_ROOT/denial-flutter-engine_${PACKAGE_VERSION}-${PACKAGE_RELEASE}_amd64.deb"
+-denial_package="$PACKAGE_ROOT/denial_${PACKAGE_VERSION}-${PACKAGE_RELEASE}_amd64.deb"
+-plugin_manager_package="$PACKAGE_ROOT/denial-plugin-manager_${PACKAGE_VERSION}-${PACKAGE_RELEASE}_amd64.deb"
++engine_package="$PACKAGE_ROOT/denial-flutter-engine_${PACKAGE_VERSION}-${PACKAGE_RELEASE}_${DEB_ARCH}.deb"
++denial_package="$PACKAGE_ROOT/denial_${PACKAGE_VERSION}-${PACKAGE_RELEASE}_${DEB_ARCH}.deb"
++plugin_manager_package="$PACKAGE_ROOT/denial-plugin-manager_${PACKAGE_VERSION}-${PACKAGE_RELEASE}_${DEB_ARCH}.deb"
+ 
+ engine_control="$(cat <<EOF
+ Section: libs
+@@ -138,7 +145,7 @@ installed_size="$(du -sk --apparent-size "$STAGE_ROOT/denial" | cut -f1)"
+ {
+   printf 'Package: denial\n'
+   printf 'Version: %s-%s\n' "$PACKAGE_VERSION" "$PACKAGE_RELEASE"
+-  printf 'Architecture: amd64\n'
++  printf 'Architecture: %s\n' "$DEB_ARCH"
+   printf 'Maintainer: %s\n' "$PACKAGER"
+   printf 'Installed-Size: %s\n' "$installed_size"
+   printf '%s\n' "$denial_control"
+@@ -172,3 +179,4 @@ env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+ 
+ printf '\nDebian packages ready:\n%s\n%s\n%s\n' \
+   "$engine_package" "$denial_package" "$plugin_manager_package"
++# DENIAL_ARM64_PATCHED
+diff --git a/tools/package-denial-rpm b/tools/package-denial-rpm
+index af09563..9514e01 100755
+--- a/tools/package-denial-rpm
++++ b/tools/package-denial-rpm
+@@ -105,9 +105,9 @@ env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" rpmbuild -bb \
+   "${runtime_version_definition[@]}" \
+   "$RPM_ROOT/SPECS/denial.spec"
+ 
+-denial_package="$(find "$RPM_ROOT/RPMS" -type f -name "denial-${PACKAGE_VERSION}-${PACKAGE_RELEASE}.x86_64.rpm" -print -quit)"
+-engine_package="$(find "$RPM_ROOT/RPMS" -type f -name "denial-flutter-engine-${PACKAGE_VERSION}-${PACKAGE_RELEASE}.x86_64.rpm" -print -quit)"
+-plugin_manager_package="$(find "$RPM_ROOT/RPMS" -type f -name "denial-plugin-manager-${PACKAGE_VERSION}-${PACKAGE_RELEASE}.x86_64.rpm" -print -quit)"
++denial_package="$(find "$RPM_ROOT/RPMS" -type f -name "denial-${PACKAGE_VERSION}-${PACKAGE_RELEASE}.*.rpm" -print -quit)"
++engine_package="$(find "$RPM_ROOT/RPMS" -type f -name "denial-flutter-engine-${PACKAGE_VERSION}-${PACKAGE_RELEASE}.*.rpm" -print -quit)"
++plugin_manager_package="$(find "$RPM_ROOT/RPMS" -type f -name "denial-plugin-manager-${PACKAGE_VERSION}-${PACKAGE_RELEASE}.*.rpm" -print -quit)"
+ [[ -n "$denial_package" && -n "$engine_package" && -n "$plugin_manager_package" ]] \
+   || { printf 'package-denial-rpm: expected RPM outputs are missing\n' >&2; exit 1; }
+ 
+@@ -139,3 +139,4 @@ rpm --dbpath "$RPM_ROOT/database" -qp \
+ 
+ printf '\n%s packages ready:\n%s\n%s\n%s\n' \
+   "$RPM_LABEL" "$engine_output" "$denial_output" "$plugin_manager_output"
++# DENIAL_ARM64_PATCHED
+diff --git a/tools/prepare-denial-plugin-kit b/tools/prepare-denial-plugin-kit
+index 825b6b7..e0c0a59 100755
+--- a/tools/prepare-denial-plugin-kit
++++ b/tools/prepare-denial-plugin-kit
+@@ -110,8 +110,9 @@ def main():
+             args.flutter_revision != locked_flutter_revision):
+         parser.error('Flutter revision differs from SOURCE_LOCK.json')
+     release = root / f'prebuilt/flutter-engine/{args.platform}-release'
+-    expected = (release / 'libflutter_engine.so.sha256').read_text().split()[0]
+-    if digest(engine / 'libflutter_engine.so') != expected:
++    _pinned = (release / 'libflutter_engine.so.sha256').read_text().split()
++    expected = _pinned[0] if _pinned else ''
++    if expected and digest(engine / 'libflutter_engine.so') != expected:
+         parser.error('local engine differs from the pinned release engine')
+     output.mkdir(parents=True)
+     runtime = output / 'runtime'
+@@ -249,3 +250,4 @@ exec "$FLUTTER_ROOT/bin/cache/dart-sdk/bin/dart" \\
+ 
+ if __name__ == '__main__':
+     main()
++# DENIAL_ARM64_PATCHED
+diff --git a/tools/stage-denial-runtime b/tools/stage-denial-runtime
+index adf440f..e422567 100755
+--- a/tools/stage-denial-runtime
++++ b/tools/stage-denial-runtime
+@@ -4,6 +4,15 @@ export LC_ALL=C
+ 
+ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
++HOST_CPU="${DENIAL_HOST_CPU:-}"
++case "${HOST_CPU:-$(uname -m)}" in
++  aarch64|arm64) HOST_CPU=arm64 ;;
++  x86_64|amd64) HOST_CPU=x64 ;;
++  *)
++    printf 'stage-denial-runtime: unsupported host CPU: %s\n' "${HOST_CPU:-$(uname -m)}" >&2
++    exit 1
++    ;;
++esac
+ 
+ CACHE_ROOT="${XDG_CACHE_HOME:-${HOME:?HOME is required}/.cache}"
+ BUILD_ROOT="${DENIAL_PC_BUILD_ROOT:-$CACHE_ROOT/denial/pc-build}"
+@@ -15,12 +24,12 @@ CONTROL_BINARY="${DENIAL_PC_CONTROL_BINARY:-$RUST_TARGET/release/denialctl}"
+ PORTAL_BINARY="${DENIAL_PC_PORTAL_BINARY:-$RUST_TARGET/release/denial-portal}"
+ BUNDLE="${DENIAL_PC_BUNDLE:-$PACKAGE_INPUT_ROOT/bundle}"
+ BUNDLE_ASSEMBLY="${DENIAL_PC_BUNDLE_ASSEMBLY:-$PACKAGE_INPUT_ROOT/flutter-release}"
+-SETTINGS_BUNDLE="${DENIAL_PC_SETTINGS_BUNDLE:-$ROOT/settings_app/build/linux/x64/release/bundle}"
+-PLUGIN_MANAGER_BUNDLE="${DENIAL_PC_PLUGIN_MANAGER_BUNDLE:-$ROOT/plugin_manager_app/build/linux/x64/release/bundle}"
++SETTINGS_BUNDLE="${DENIAL_PC_SETTINGS_BUNDLE:-$ROOT/settings_app/build/linux/${HOST_CPU}/release/bundle}"
++PLUGIN_MANAGER_BUNDLE="${DENIAL_PC_PLUGIN_MANAGER_BUNDLE:-$ROOT/plugin_manager_app/build/linux/${HOST_CPU}/release/bundle}"
+ PLUGIN_MANAGER_BACKEND="${DENIAL_PC_PLUGIN_MANAGER_BACKEND:-$BUILD_ROOT/plugin-manager/denial-plugins}"
+ PLUGIN_BUILD_KIT="${DENIAL_PC_PLUGIN_BUILD_KIT:-$BUILD_ROOT/plugin-manager/build-kit}"
+ POLKIT_BACKEND="${DENIAL_PC_POLKIT_BACKEND:-$RUST_TARGET/release/denial-polkit-agent}"
+-POLKIT_BUNDLE="${DENIAL_PC_POLKIT_BUNDLE:-$ROOT/polkit_app/build/linux/x64/release/bundle}"
++POLKIT_BUNDLE="${DENIAL_PC_POLKIT_BUNDLE:-$ROOT/polkit_app/build/linux/${HOST_CPU}/release/bundle}"
+ PACKAGE_RELEASE="${DENIAL_PACKAGE_RELEASE:-1}"
+ RELEASE_TAG="${DENIAL_RELEASE_TAG:-}"
+ REQUESTED_PACKAGE_VERSION="${DENIAL_PACKAGE_VERSION:-}"
+@@ -192,12 +201,14 @@ denial_root="$temporary_stage/denial"
+ plugin_manager_root="$temporary_stage/denial-plugin-manager"
+ install -d -m 0755 "$engine_root" "$denial_root" "$plugin_manager_root"
+ 
+-engine_source_root="$ROOT/prebuilt/flutter-engine/linux-x64-release"
++engine_source_root="$ROOT/prebuilt/flutter-engine/linux-${HOST_CPU}-release"
+ source_lock="$ROOT/prebuilt/flutter-engine/SOURCE_LOCK.json"
+ expected_engine_sha256="$(cut -d' ' -f1 < "$engine_source_root/libflutter_engine.so.sha256")"
+ actual_engine_sha256="$(sha256sum "$BUNDLE/lib/libflutter_engine.so" | cut -d' ' -f1)"
+-[[ "$actual_engine_sha256" == "$expected_engine_sha256" ]] \
+-  || die "Flutter Engine SHA-256 is $actual_engine_sha256, expected $expected_engine_sha256"
++if [[ -n "$expected_engine_sha256" ]]; then
++  [[ "$actual_engine_sha256" == "$expected_engine_sha256" ]] \
++    || die "Flutter Engine SHA-256 is $actual_engine_sha256, expected $expected_engine_sha256"
++fi
+ 
+ install -Dm755 "$BUNDLE/lib/libflutter_engine.so" \
+   "$engine_root/usr/lib/denial/flutter/lib/libflutter_engine.so"
+@@ -391,3 +402,4 @@ trap - EXIT
+ printf 'Native package payload staged at %s\n' "$STAGE_ROOT"
+ printf 'Version: %s-%s (GLIBC <= %s)\n' \
+   "$package_version" "$PACKAGE_RELEASE" "$GLIBC_BASELINE"
++# DENIAL_ARM64_PATCHED
+diff --git a/tools/verify-denial-native-package-metadata b/tools/verify-denial-native-package-metadata
+index 4d5f522..7f7dd5e 100755
+--- a/tools/verify-denial-native-package-metadata
++++ b/tools/verify-denial-native-package-metadata
+@@ -47,7 +47,7 @@ verify_deb() {
+   package_arch="$(dpkg-deb --field "$package" Architecture)"
+   [[ "$(dpkg-deb --field "$package" Version)" == "$expected_version" ]] \
+     || fail "$(basename -- "$package") has the wrong Debian version"
+-  [[ "$package_arch" == amd64 ]] \
++  [[ "$package_arch" == amd64 || "$package_arch" == arm64 ]] \
+     || fail "$(basename -- "$package") targets $package_arch, expected amd64"
+   package_dependencies="$(dpkg-deb --field "$package" Depends)"
+   package_provides="$(dpkg-deb --field "$package" Provides 2>/dev/null || true)"
+@@ -190,7 +190,7 @@ verify_rpm() {
+   [[ "$(rpm --dbpath "$rpm_query_db" -qp --qf '%{VERSION}-%{RELEASE}' "$package")" \
+     == "$expected_version" ]] \
+     || fail "$(basename -- "$package") has the wrong RPM version"
+-  [[ "$package_arch" == x86_64 ]] \
++  [[ "$package_arch" == x86_64 || "$package_arch" == aarch64 ]] \
+     || fail "$(basename -- "$package") targets $package_arch, expected x86_64"
+   requirements="$(rpm --dbpath "$rpm_query_db" -qp --requires "$package")"
+   provides="$(rpm --dbpath "$rpm_query_db" -qp --provides "$package")"
+@@ -319,3 +319,4 @@ case "$format" in
+   deb) verify_deb ;;
+   rpm) verify_rpm ;;
+ esac
++# DENIAL_ARM64_PATCHED

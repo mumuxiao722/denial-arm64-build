@@ -29,12 +29,16 @@ gh variable set DENIAL_REF --body v0.6.0
 
 ```sh
 git clone --branch v0.5.0 https://github.com/denialwm/denial.git denial
-patches/denial-arm64-builder.sh denial
+cd denial
+git apply /path/to/denial-arm64-builder/patches/denial-arm64.diff
+../denial-arm64-builder/patches/seed-arm64-prebuilt.sh .
 ```
 
-脚本锚定在所追踪 tag 所带的代码结构上，且是幂等的：运行两次会逐项报告已经打过补丁。
-如果未来的发布改动了某个被锚定的代码块，脚本会报出它找不到的锚点并退出，而不是只应用
-一半的改动。
+请把本仓库的 `patches/` 目录放在 Denial 检出目录旁边：打过补丁的构建系统会直接
+调用 `patches/patch-deps.py`，而 `patches/seed-arm64-prebuilt.sh` 用来创建 Denial
+校验所需的 ARM64 prebuilt 元数据目录。
+
+这个 diff 包含针对 `v0.5.0` 的全部改动，所以打完之后用 `git diff` 就能看清它做了什么。
 
 ## 构建
 

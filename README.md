@@ -32,13 +32,18 @@ engine cache on its own. Nothing else needs editing.
 
 ```sh
 git clone --branch v0.5.0 https://github.com/denialwm/denial.git denial
-patches/denial-arm64-builder.sh denial
+cd denial
+git apply /path/to/denial-arm64-builder/patches/denial-arm64.diff
+../denial-arm64-builder/patches/seed-arm64-prebuilt.sh .
 ```
 
-The script anchors on the code shapes the tracked tag ships and is idempotent:
-running it twice reports each target as already patched. If a future release
-reshapes an anchored block, the script exits naming the anchor it could not
-find instead of applying a partial change.
+Keep this repository's `patches/` directory alongside the Denial checkout;
+the patched build system calls `patches/patch-deps.py` directly, and
+`patches/seed-arm64-prebuilt.sh` creates the ARM64 prebuilt metadata
+directories Denial checks against.
+
+The diff carries the whole change set against `v0.5.0`, so what it does is
+readable with `git diff` afterwards.
 
 ## Building
 
