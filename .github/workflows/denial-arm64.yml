@@ -150,11 +150,6 @@ jobs:
         run: ./tools/denial-pc build
         working-directory: denial
 
-      - name: "Report compiler cache"
-        if: ${{ always() }}
-        run: |
-          sccache --show-stats || true
-
       - name: "Stage runtime"
         run: ./tools/stage-denial-runtime
         working-directory: denial
