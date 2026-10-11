@@ -116,7 +116,7 @@ jobs:
         run: |
           cd denial
           git apply "$GITHUB_WORKSPACE/patches/denial-arm64.diff"
-          python3 "$GITHUB_WORKSPACE/patches/patch-deps.py" seed-prebuilt .
+          python3 "$GITHUB_WORKSPACE/patches/arm64-prep.py" seed-prebuilt .
 
       - name: "Denial doctor (host prerequisite check)"
         run: ./tools/denial-pc doctor || true

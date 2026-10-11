@@ -170,7 +170,7 @@ index 2d07829..06835c9 100755
  
    cd "$CHECKOUT"
    if [[ "$DENIAL_ARCH" != aarch64 ]]; then
-+    python3 "$ROOT/../patches/patch-deps.py" "$CHECKOUT/DEPS"
++    python3 "$ROOT/../patches/arm64-prep.py" "$CHECKOUT/DEPS"
      PATH="$DEPOT_TOOLS/.cipd_bin:$DEPOT_TOOLS:$PATH" \
        DEPOT_TOOLS_UPDATE=0 \
        VPYTHON_VIRTUALENV_ROOT="$VPYTHON_CACHE_ROOT" \

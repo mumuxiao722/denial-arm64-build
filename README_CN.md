@@ -31,10 +31,10 @@ gh variable set DENIAL_REF --body v0.6.0
 git clone --branch v0.5.0 https://github.com/denialwm/denial.git denial
 cd denial
 git apply /path/to/denial-arm64-builder/patches/denial-arm64.diff
-python3 /path/to/denial-arm64-builder/patches/patch-deps.py seed-prebuilt .
+python3 /path/to/denial-arm64-builder/patches/arm64-prep.py seed-prebuilt .
 ```
 
-请把本仓库的 `patches/` 目录放在 Denial 检出目录旁边。`patch-deps.py
+请把本仓库的 `patches/` 目录放在 Denial 检出目录旁边。`arm64-prep.py
 seed-prebuilt` 用来创建 Denial 校验所需的 ARM64 prebuilt 元数据目录；打过补丁的
 构建系统会用同一个文件、传入 `patch-deps` 参数，去改写 `gclient sync` 拉取的
 `DEPS`。

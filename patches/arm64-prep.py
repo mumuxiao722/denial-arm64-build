@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Runtime helpers for the ARM64 patch set.
+"""Preparation steps for the ARM64 patch set.
 
 Two jobs that a diff cannot express, kept behind one entry point.
 
@@ -15,8 +15,10 @@ seed-prebuilt
     three copies of a 30,000-line upstream licence file and would bury the
     667 lines of actual change.
 
-Called with no argument it does patch-deps, because that is how the patched
-build system invokes it.
+The patched build system runs this with the patch-deps command; with no
+command at all patch-deps is the default, since that is how the diff wires
+it up. seed-prebuilt is meant to be run once, right after the diff is
+applied.
 """
 import os
 import shutil
@@ -89,11 +91,11 @@ def main(argv):
     command = argv[1] if len(argv) > 1 else "patch-deps"
     if command == "patch-deps":
         if len(argv) < 3:
-            sys.exit("usage: patch-deps.py patch-deps <DEPS-path>")
+            sys.exit("usage: arm64-prep.py patch-deps <DEPS-path>")
         patch_deps(argv[2])
     elif command == "seed-prebuilt":
         if len(argv) < 3:
-            sys.exit("usage: patch-deps.py seed-prebuilt <denial-repo-dir>")
+            sys.exit("usage: arm64-prep.py seed-prebuilt <denial-repo-dir>")
         seed_prebuilt(argv[2])
     else:
         sys.exit(f"unknown command: {command}")
