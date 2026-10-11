@@ -29,7 +29,7 @@ gh variable set DENIAL_REF --body v0.5.0
 | `v0.5.0` | current |
 
 Every cache key derives from that variable, so moving to a new release
-invalidates the engine and build caches automatically.
+invalidates the engine cache automatically.
 
 ## Usage
 
@@ -86,15 +86,18 @@ The workflow runs on `ubuntu-24.04-arm` and is dispatched manually, or on a
 push touching `patches/`. It takes `publish_release` (default off) as its only
 input; everything else derives from `DENIAL_REF`.
 
-Two caches are maintained, each saved at the step that produces it so a later
-failure does not discard the work:
+One cache is maintained:
 
-- `denial-engine-cache-<ref>` — the Flutter engine, saved right after
-  `denial-flutter-engine build`. A cold build costs over 40 minutes.
-- `denial-build-<ref>-<run>` — the staged runtime tree and the Rust output,
-  saved after staging. On a hit, `denial-pc build` and staging are skipped.
+- `denial-engine-cache-<ref>` — the finished `libflutter_engine.so` and the
+  build state that goes with it, saved right after `denial-flutter-engine
+  build`.
 
-Both saves require `success()`, so a failed build never caches a partial tree.
+Only the engine's finished artifacts are cached. Its Skia objects run to tens
+of gigabytes, past the repository's 10 GB cache quota, so they are rebuilt on
+every run, as are the Rust binaries and the Flutter bundle. A run therefore
+spends roughly 40 minutes in the engine and another 50 in `denial-pc build`
+before it reaches packaging. The cache saves the final link and packaging
+step, not the bulk compile.
 
 Packaging targets, all from the same staged payload. Fedora and openSUSE
 produce the same RPM filenames, so they are kept apart by directory when

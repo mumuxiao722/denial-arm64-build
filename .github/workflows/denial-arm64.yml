@@ -63,17 +63,6 @@ jobs:
           restore-keys: |
             denial-engine-cache-${{ vars.DENIAL_REF }}
 
-      - name: "Restore Denial build cache"
-        id: build-cache-restore
-        uses: actions/cache/restore@v5
-        with:
-          path: |
-            ${{ github.workspace }}/.denial-cache/pc-build/package-input
-            ${{ github.workspace }}/.denial-cache/pc-build/rust
-          key: denial-build-${{ vars.DENIAL_REF }}-
-          restore-keys: |
-            denial-build-${{ vars.DENIAL_REF }}-
-
       - name: "Install Build Tools"
         run: |
           sudo apt-get update
@@ -160,27 +149,18 @@ jobs:
             ${{ github.workspace }}/.denial-cache/engine/state
           key: ${{ steps.engine-cache-restore.outputs.cache-primary-key }}
 
-      # Everything above this point costs the engine rebuild. When the build
-      # cache restored, the staged tree and binaries are already present and
-      # only packaging is left.
+      # The Flutter engine's Skia objects are not cached: they run to tens of
+      # gigabytes, past the 10 GB repository quota. What the engine cache does
+      # hold is the finished libflutter_engine.so, which saves the link and
+      # packaging step. Everything between here and the packages is Rust and
+      # Flutter, rebuilt on every run.
       - name: "Build Denial"
-        if: ${{ steps.build-cache-restore.outputs.cache-hit != 'true' }}
         run: ./tools/denial-pc build
         working-directory: denial
 
       - name: "Stage runtime"
-        if: ${{ steps.build-cache-restore.outputs.cache-hit != 'true' }}
         run: ./tools/stage-denial-runtime
         working-directory: denial
-
-      - name: "Save build cache"
-        if: ${{ success() && steps.build-cache-restore.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v5
-        with:
-          path: |
-            ${{ github.workspace }}/.denial-cache/pc-build/package-input
-            ${{ github.workspace }}/.denial-cache/pc-build/rust
-          key: denial-build-${{ vars.DENIAL_REF }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       # Package and upload one distribution at a time. Each upload runs with
       # always() so a later target failing cannot discard what already built,

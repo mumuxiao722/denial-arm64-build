@@ -25,7 +25,7 @@ gh variable set DENIAL_REF --body v0.5.0
 | --- | --- |
 | `v0.5.0` | 当前 |
 
-所有缓存键都从该变量派生，所以切换到新版本会自动使引擎缓存和构建缓存失效。
+所有缓存键都从该变量派生，所以切换到新版本会自动使引擎缓存失效。
 
 ## 使用方法
 
@@ -74,14 +74,15 @@ patches/denial-arm64-builder.sh denial
 workflow 运行在 `ubuntu-24.04-arm` 上，手动触发，或在 `patches/` 变更时触发。它只有
 `publish_release`（默认关闭）一个输入项，其余全部从 `DENIAL_REF` 派生。
 
-维护两份缓存，各自紧跟产生它的步骤保存，这样后续失败不会丢弃已有工作：
+只维护一份缓存：
 
-- `denial-engine-cache-<ref>` —— Flutter 引擎，在 `denial-flutter-engine build` 之后立即保存。
-  冷编译需要 40 多分钟。
-- `denial-build-<ref>-<run>` —— staging 后的运行时目录树和 Rust 产物。命中时会跳过
-  `denial-pc build` 和 staging。
+- `denial-engine-cache-<ref>` —— 编译完成的 `libflutter_engine.so` 以及配套的构建状态，
+  在 `denial-flutter-engine build` 之后立即保存。
 
-两者的保存都要求 `success()`，所以失败的构建不会缓存半成品。
+只缓存引擎的最终产物。Skia 的中间对象有几十 GB，超出仓库 10 GB 的缓存配额，因此每次
+运行都会重编；Rust 二进制和 Flutter bundle 同理。所以一次运行大约在引擎上花 40 分钟、
+在 `denial-pc build` 上再花 50 分钟，之后才进入打包。缓存省下的是最后的链接和打包步骤，
+不是主体编译。
 
 打包目标，全部来自同一份 staging 产物。Fedora 和 openSUSE 产出相同的 RPM 文件名，因此
 打包时用目录区分，上传时用 artifact 名区分：
