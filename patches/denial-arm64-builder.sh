@@ -142,11 +142,15 @@ else:
     # change. cc_wrapper names ccache as the compiler; the -I/usr/lib/ccache
     # that ccache's masquerade mode wants is not needed here, since GN still
     # invokes the real compiler by its own name.
+    #
+    # The value has to be quoted: unquoted, gn parses it as an identifier and
+    # the whole gen fails with
+    #   ERROR at the command-line "--args":1:2043: Undefined identifier
     cc_args_anchor = 'GN_ENGINE_ARGS=(\n  --slimpeller\n'
     cc_args_repl = (
         'GN_ENGINE_ARGS=(\n'
         '  --slimpeller\n'
-        '  --gn-args=cc_wrapper=ccache\n'
+        '  --gn-args=cc_wrapper="ccache"\n'
     )
     cc_note = ""
     if cc_args_anchor in s:
