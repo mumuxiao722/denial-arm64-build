@@ -139,27 +139,47 @@ jobs:
           makepkg --version
 
           # makepkg aborts with "An unknown error has occurred" and exit 138
-          # before it prints anything, so the failing call is not visible in
-          # the step log. Report what makepkg can see, and exercise the same
-          # entry point the packager uses, one variable at a time.
-          echo "--- makepkg environment ---"
-          for var in BUILDDIR PKGDEST SRCDEST SRCPKGDEST PKGDEST; do
-            printf '%s=%s\n' "$var" "${!var:-<unset>}"
-          done
-          printf 'HOME=%s\n' "$HOME"
-          printf 'cwd=%s\n' "$PWD"
-          command -v fakeroot bsdtar zstd xz gzip 2>&1 || true
+          # even for `makepkg --printsrcinfo`, which only reads the PKGBUILD.
+          # makepkg.conf is the one input that differs from a normal Arch
+          # system, so fetch the one pacman ships and compare the two. Take the
+          # newest name from the archive listing rather than pinning a version
+          # that will rot.
+          echo "--- makepkg.conf shipped by ubuntu ---"
+          if [[ -f /etc/makepkg.conf ]]; then
+            grep -vE '^[[:space:]]*(#|$)' /etc/makepkg.conf || echo "(no active settings)"
+          else
+            echo "(absent)"
+          fi
 
-          echo "--- makepkg --printsrcinfo on the engine PKGBUILD ---"
-          cd denial/packaging/arch/flutter-engine
+          work="$(mktemp -d)"
+          cd "$work"
+          pacman_pkg="$(
+            curl -fsSL https://archive.archlinux.org/packages/p/pacman/ \
+              | grep -oE 'pacman-[0-9][^"]*x86_64\.pkg\.tar\.(zst|xz)' \
+              | sort -V | tail -1
+          )"
+          echo "--- newest archived pacman: ${pacman_pkg:-none found} ---"
+          if [[ -n "$pacman_pkg" ]]; then
+            if curl -fsSL -o pacman.pkg "https://archive.archlinux.org/packages/p/pacman/$pacman_pkg"; then
+              tar --zstd -xf pacman.pkg etc/makepkg.conf 2>/dev/null \
+                || tar -xJf pacman.pkg etc/makepkg.conf 2>/dev/null \
+                || echo "could not extract etc/makepkg.conf"
+            fi
+            if [[ -f etc/makepkg.conf ]]; then
+              echo "--- active settings in pacman's own makepkg.conf ---"
+              grep -vE '^[[:space:]]*(#|$)' etc/makepkg.conf || echo "(no active settings)"
+              echo "--- diff against the ubuntu one ---"
+              diff -u /etc/makepkg.conf etc/makepkg.conf || true
+            fi
+          fi
+
+          echo "--- printsrcinfo with ubuntu's makepkg.conf ---"
+          cd "$GITHUB_WORKSPACE/denial/packaging/arch/flutter-engine"
           set +e
           makepkg --printsrcinfo 2>&1 | head -20
-          printf 'printsrcinfo exit=%s\n' "$?"
-          echo "--- makepkg --packagelist on the same PKGBUILD ---"
-          makepkg --packagelist 2>&1 | head -5
-          printf 'packagelist exit=%s\n' "$?"
+          echo "--- printsrcinfo with pacman's makepkg.conf ---"
+          makepkg --config "$work/etc/makepkg.conf" --printsrcinfo 2>&1 | head -20
           set -e
-          cd - >/dev/null
 
       - name: "Patch Denial tooling for ARM64"
         run: patches/denial-arm64-builder.sh denial
