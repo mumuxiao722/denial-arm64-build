@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_dir="${1:?usage: patch-denial-arm64.sh <repo-dir>}"
+repo_dir="${1:?usage: denial-arm64-builder.sh <repo-dir>}"
 
 python3 - "$repo_dir" <<'PY'
 import re, sys
@@ -11,12 +11,19 @@ repo = Path(sys.argv[1]).resolve()
 marker = "# DENIAL_ARM64_PATCHED\n"
 
 
+def read(path):
+    # Upstream sources are UTF-8, but read_text() without an explicit
+    # encoding uses the locale default, which on a minimal CI image can be
+    # ASCII or POSIX and would raise on any non-ASCII byte in the file.
+    return path.read_text(encoding="utf-8")
+
+
 def patched(path):
-    return marker in path.read_text()
+    return marker in read(path)
 
 
 def mark(path, text, note):
-    path.write_text(text)
+    path.write_text(text, encoding="utf-8")
     print(note)
 
 
@@ -25,7 +32,7 @@ engine = repo / "tools" / "denial-flutter-engine"
 if patched(engine):
     print("denial-flutter-engine: already patched")
 else:
-    s = engine.read_text()
+    s = read(engine)
 
     m = re.search(
         r"^([ \t]*)gclient sync --no-history --nohooks\s*$",
@@ -45,7 +52,10 @@ else:
             break
     indent = s[chain_start : s.find("\n", chain_start)]
     indent = indent[: len(indent) - len(indent.lstrip())]
-    hook = indent + 'python3 "$ROOT/../.github/denial-arm64/patch-deps.py" "$CHECKOUT/DEPS"\n'
+    hook = (
+        indent
+        + 'python3 "$ROOT/../patches/patch-deps.py" "$CHECKOUT/DEPS"\n'
+    )
     s = s[:chain_start] + hook + s[chain_start:]
 
     m2 = re.search(r"^([ \t]*)gclient runhooks\s*$", s, re.M)
@@ -146,134 +156,87 @@ pc = repo / "tools" / "denial-pc"
 if patched(pc):
     print("denial-pc: already patched")
 else:
-    s = pc.read_text()
+    s = read(pc)
     n = s.count("linux-x64")
     m = s.count("linux/x64")
     s = s.replace("linux-x64", "linux-arm64").replace("linux/x64", "linux/arm64")
 
-    # Upstream refactored these helpers on dev (Sep 2026). The dev shapes get
-    # the same empty-baseline leniency the pinned releases carry.
-    dev_variants = {
-        "prebuilt_engine_sha256 lenient on empty baseline": (
-            "prebuilt_engine_sha256() {\n"
-            "    if [[ -f \"$PREBUILT_ENGINE_SHA256\" ]]; then\n"
-            "        cut -d' ' -f1 < \"$PREBUILT_ENGINE_SHA256\"\n"
-            "    else\n"
-            "        require_file \"$PREBUILT_ENGINE\"\n"
-            "        file_sha256 \"$PREBUILT_ENGINE\"\n"
-            "    fi\n"
-            "}\n",
-            "prebuilt_engine_sha256() {\n"
-            "    [[ -s \"$PREBUILT_ENGINE_SHA256\" ]] || return 0\n"
-            "    cut -d' ' -f1 < \"$PREBUILT_ENGINE_SHA256\"\n"
-            "}\n",
-        ),
-        "verify_prebuilt_engine lenient on empty baseline": (
-            "verify_prebuilt_engine() {\n"
-            "    [[ -f \"$PREBUILT_ENGINE\" ]] \\\n"
-            "        || die \"missing locally built Flutter engine: $PREBUILT_ENGINE\"\n"
-            "    [[ \"$(file_sha256 \"$PREBUILT_ENGINE\")\" == \"$(prebuilt_engine_sha256)\" ]] \\\n"
-            "        || die \"locally built Flutter engine does not match $PREBUILT_ENGINE_SHA256; rebuild or investigate it\"\n",
-            "verify_prebuilt_engine() {\n"
-            "    [[ -f \"$PREBUILT_ENGINE\" ]] \\\n"
-            "        || die \"missing locally built Flutter engine: $PREBUILT_ENGINE\"\n"
-            "    local expected_prebuilt\n"
-            "    expected_prebuilt=\"$(prebuilt_engine_sha256)\"\n"
-            "    [[ -z \"$expected_prebuilt\" || \"$(file_sha256 \"$PREBUILT_ENGINE\")\" == \"$expected_prebuilt\" ]] \\\n"
-            "        || die \"locally built Flutter engine does not match $PREBUILT_ENGINE_SHA256; rebuild or investigate it\"\n",
-        ),
-    }
-    dev_require_pinned = (
-        "        expected=\"$(prebuilt_engine_sha256)\"\n"
-        "        label=\"pinned build\"\n"
-        "    fi\n"
-        "    [[ \"$expected\" =~ ^[0-9a-f]{64}$ ]] \\\n"
-        "        || die \"invalid expected SHA-256 for $label\"\n",
-        "        expected=\"$(prebuilt_engine_sha256)\"\n"
-        "        label=\"pinned build\"\n"
-        "    fi\n"
-        "    [[ -z \"$expected\" ]] && return 0\n"
-        "    [[ \"$expected\" =~ ^[0-9a-f]{64}$ ]] \\\n"
-        "        || die \"invalid expected SHA-256 for $label\"\n",
-    )
+    # This repository tracks one Denial tag at a time. The anchors below are
+    # the shapes that tag ships; a future release that reshapes one of them
+    # makes the script exit naming it rather than silently applying nothing.
     checks = [
         (
             "prebuilt_engine_sha256() {\n"
-            "    require_file \"$PREBUILT_ENGINE_SHA256\"\n"
-            "    cut -d' ' -f1 < \"$PREBUILT_ENGINE_SHA256\"\n"
+            '    if [[ -f "$PREBUILT_ENGINE_SHA256" ]]; then\n'
+            '        cut -d\' \' -f1 < "$PREBUILT_ENGINE_SHA256"\n'
+            "    else\n"
+            '        require_file "$PREBUILT_ENGINE"\n'
+            '        file_sha256 "$PREBUILT_ENGINE"\n'
+            "    fi\n"
             "}\n",
             "prebuilt_engine_sha256() {\n"
-            "    [[ -s \"$PREBUILT_ENGINE_SHA256\" ]] || return 0\n"
-            "    cut -d' ' -f1 < \"$PREBUILT_ENGINE_SHA256\"\n"
+            '    [[ -s "$PREBUILT_ENGINE_SHA256" ]] || return 0\n'
+            '    cut -d\' \' -f1 < "$PREBUILT_ENGINE_SHA256"\n'
             "}\n",
             "prebuilt_engine_sha256 lenient on empty baseline",
         ),
         (
-            "    [[ \"$(file_sha256 \"$PREBUILT_ENGINE\")\" == \"$(prebuilt_engine_sha256)\" ]] \\\n"
-            "        || die \"locally built Flutter engine does not match $PREBUILT_ENGINE_SHA256; rebuild or investigate it (see $PREBUILT_ENGINE_DIR/BUILD_INFO.md)\"\n",
-            "    local expected_prebuilt\n"
-            "    expected_prebuilt=\"$(prebuilt_engine_sha256)\"\n"
-            "    [[ -z \"$expected_prebuilt\" ]] && return 0\n"
-            "    [[ \"$(file_sha256 \"$PREBUILT_ENGINE\")\" == \"$expected_prebuilt\" ]] \\\n"
-            "        || die \"locally built Flutter engine does not match $PREBUILT_ENGINE_SHA256; rebuild or investigate it (see $PREBUILT_ENGINE_DIR/BUILD_INFO.md)\"\n",
+            '    [[ "$(file_sha256 "$PREBUILT_ENGINE")" == "$(prebuilt_engine_sha256)" ]] \\\n'
+            '        || die "locally built Flutter engine does not match $PREBUILT_ENGINE_SHA256; rebuild or investigate it"\n',
+            '    local expected_prebuilt\n'
+            '    expected_prebuilt="$(prebuilt_engine_sha256)"\n'
+            '    [[ -z "$expected_prebuilt" || "$(file_sha256 "$PREBUILT_ENGINE")" == "$expected_prebuilt" ]] \\\n'
+            '        || die "locally built Flutter engine does not match $PREBUILT_ENGINE_SHA256; rebuild or investigate it"\n',
             "verify_prebuilt_engine lenient on empty baseline",
         ),
         (
-            "        label=\"pinned build\"\n"
+            '        label="pinned build"\n'
             "    fi\n"
-            "    [[ \"$expected\" =~ ^[0-9a-f]{64}$ ]] \\\n"
-            "        || die \"invalid expected SHA-256 for $label\"\n",
-            "        label=\"pinned build\"\n"
+            '    [[ "$expected" =~ ^[0-9a-f]{64}$ ]] \\\n'
+            '        || die "invalid expected SHA-256 for $label"\n',
+            '        label="pinned build"\n'
             "    fi\n"
-            "    [[ -z \"$expected\" ]] && return 0\n"
-            "    [[ \"$expected\" =~ ^[0-9a-f]{64}$ ]] \\\n"
-            "        || die \"invalid expected SHA-256 for $label\"\n",
+            '    [[ -z "$expected" ]] && return 0\n'
+            '    [[ "$expected" =~ ^[0-9a-f]{64}$ ]] \\\n'
+            '        || die "invalid expected SHA-256 for $label"\n',
             "require_pinned_engine lenient on empty baseline",
         ),
         (
             "require_flutter_bindings() {\n"
-            "    require_file \"$PREBUILT_ENGINE_REVISION\"\n"
-            "    require_file \"$PREBUILT_FLUTTER_REVISION\"\n"
-            "    require_file \"$EMBEDDER_BINDINGS\"\n",
+            '    require_file "$PREBUILT_ENGINE_REVISION"\n'
+            '    require_file "$PREBUILT_FLUTTER_REVISION"\n'
+            '    require_file "$EMBEDDER_BINDINGS"\n',
             "require_flutter_bindings() {\n"
-            "    if [[ ! -s \"$PREBUILT_ENGINE_REVISION\" \\\n"
-            "        || ! -s \"$PREBUILT_FLUTTER_REVISION\" ]]; then\n"
-            "        require_file \"$EMBEDDER_BINDINGS\"\n"
+            '    if [[ ! -s "$PREBUILT_ENGINE_REVISION" \\\n'
+            '        || ! -s "$PREBUILT_FLUTTER_REVISION" ]]; then\n'
+            '        require_file "$EMBEDDER_BINDINGS"\n'
             "        printf '%s: self-built engine without pinned revisions (skipping revision match)\\n' \\\n"
-            "          \"$(basename -- \"$0\")\" >&2\n"
+            '          "$(basename -- "$0")" >&2\n'
             "        return 0\n"
             "    fi\n"
-            "    require_file \"$PREBUILT_ENGINE_REVISION\"\n"
-            "    require_file \"$PREBUILT_FLUTTER_REVISION\"\n"
-            "    require_file \"$EMBEDDER_BINDINGS\"\n",
+            '    require_file "$PREBUILT_ENGINE_REVISION"\n'
+            '    require_file "$PREBUILT_FLUTTER_REVISION"\n'
+            '    require_file "$EMBEDDER_BINDINGS"\n',
             "require_flutter_bindings lenient on missing pinned revisions",
         ),
     ]
-    applied = 0
     for old, new, note in checks:
-        if old in s:
-            s = s.replace(old, new, 1)
-            applied += 1
-            continue
-        if note == "require_pinned_engine lenient on empty baseline" and dev_require_pinned[0] in s:
-            s = s.replace(dev_require_pinned[0], dev_require_pinned[1], 1)
-            print("denial-pc: applied dev variant: require_pinned_engine lenient on empty baseline")
-            applied += 1
-            continue
-        if note in dev_variants and dev_variants[note][0] in s:
-            s = s.replace(dev_variants[note][0], dev_variants[note][1], 1)
-            print(f"denial-pc: applied dev variant: {note}")
-            applied += 1
-            continue
-        sys.exit(f"patch: denial-pc anchor not found: {note}")
-    mark(pc, s + marker, f"patched denial-pc (arch paths, {applied} lenient engine checks)")
+        if old not in s:
+            sys.exit(f"patch: denial-pc anchor not found: {note}")
+        s = s.replace(old, new, 1)
+    mark(
+        pc,
+        s + marker,
+        f"patched denial-pc (arch paths, {len(checks)} lenient engine checks)",
+    )
+
 
 # ---------- tools/stage-denial-runtime ----------
 stage = repo / "tools" / "stage-denial-runtime"
 if patched(stage):
     print("stage-denial-runtime: already patched")
 else:
-    s = stage.read_text()
+    s = read(stage)
 
     root_anchor = 'ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"\n'
     if root_anchor not in s:
@@ -347,7 +310,7 @@ rpm = repo / "tools" / "package-denial-rpm"
 if patched(rpm):
     print("package-denial-rpm: already patched")
 else:
-    s = rpm.read_text()
+    s = read(rpm)
     n = s.count(".x86_64.rpm")
     s = s.replace(".x86_64.rpm", ".*.rpm")
     mark(rpm, s + marker, f"patched package-denial-rpm ({n} x86_64 rpm globs widened)")
@@ -362,7 +325,7 @@ arch_packager = repo / "tools" / "package-denial-arch"
 if patched(arch_packager):
     print("package-denial-arch: already patched")
 else:
-    s = arch_packager.read_text()
+    s = read(arch_packager)
     arch_sha_anchor = (
         '  cut -d\' \' -f1 \\\n'
         '    < "$ROOT/prebuilt/flutter-engine/linux-x64-release/libflutter_engine.so.sha256"\n'
@@ -403,7 +366,11 @@ if not arch_pkgbuilds:
     sys.exit("patch: no packaging/arch PKGBUILD found")
 arch_pkgbuild_n = 0
 for pkgbuild in arch_pkgbuilds:
-    s = pkgbuild.read_text()
+    if patched(pkgbuild):
+        print(f"{pkgbuild.relative_to(repo)}: already patched")
+        arch_pkgbuild_n += 1
+        continue
+    s = read(pkgbuild)
     decl = "arch=('x86_64')\n"
     if decl not in s:
         sys.exit(f"patch: {pkgbuild.relative_to(repo)} arch declaration not found")
@@ -420,7 +387,7 @@ opensuse_spec = repo / "packaging" / "opensuse" / "denial.spec"
 if patched(opensuse_spec):
     print("packaging/opensuse/denial.spec: already patched")
 else:
-    s = opensuse_spec.read_text()
+    s = read(opensuse_spec)
     opensuse_anchor = "ExclusiveArch:  x86_64\n"
     if opensuse_anchor not in s:
         sys.exit("patch: opensuse denial.spec ExclusiveArch anchor not found")
@@ -440,7 +407,7 @@ deb = repo / "tools" / "package-denial-deb"
 if patched(deb):
     print("package-denial-deb: already patched")
 else:
-    s = deb.read_text()
+    s = read(deb)
     deb_arch_anchor = 'for required_command in dpkg-deb install mktemp; do\n'
     if deb_arch_anchor not in s:
         sys.exit("patch: package-denial-deb requirement anchor not found")
@@ -493,7 +460,7 @@ kit = repo / "tools" / "prepare-denial-plugin-kit"
 if patched(kit):
     print("prepare-denial-plugin-kit: already patched")
 else:
-    s = kit.read_text()
+    s = read(kit)
     kit_anchor = (
         "    expected = (release / 'libflutter_engine.so.sha256').read_text().split()[0]\n"
         "    if digest(engine / 'libflutter_engine.so') != expected:\n"
@@ -515,7 +482,7 @@ spec = repo / "packaging" / "fedora" / "denial.spec"
 if patched(spec):
     print("denial.spec: already patched")
 else:
-    s = spec.read_text()
+    s = read(spec)
     anchor = "ExclusiveArch:  x86_64\n"
     if anchor not in s:
         sys.exit("patch: denial.spec ExclusiveArch anchor not found")
@@ -527,14 +494,30 @@ verify = repo / "tools" / "verify-denial-native-package-metadata"
 if patched(verify):
     print("verify-denial-native-package-metadata: already patched")
 else:
-    s = verify.read_text()
-    anchor = '  [[ "$package_arch" == x86_64 ]] \\\n'
-    if anchor not in s:
-        sys.exit("patch: verify-denial-native-package-metadata arch anchor not found")
+    s = read(verify)
+    rpm_anchor = '  [[ "$package_arch" == x86_64 ]] \\\n'
+    if rpm_anchor not in s:
+        sys.exit("patch: verify-denial-native-package-metadata rpm arch anchor not found")
     s = s.replace(
-        anchor,
+        rpm_anchor,
         '  [[ "$package_arch" == x86_64 || "$package_arch" == aarch64 ]] \\\n',
         1,
     )
-    mark(verify, s + marker, "patched verify-denial-native-package-metadata (accepts aarch64 rpm arch)")
+
+    # The deb checker lives in the same file and has its own hardcoded amd64
+    # expectation. Without this the three debs build and are byte-verified,
+    # then the run dies on the arch assertion.
+    deb_anchor = '  [[ "$package_arch" == amd64 ]] \\\n'
+    if deb_anchor not in s:
+        sys.exit("patch: verify-denial-native-package-metadata deb arch anchor not found")
+    s = s.replace(
+        deb_anchor,
+        '  [[ "$package_arch" == amd64 || "$package_arch" == arm64 ]] \\\n',
+        1,
+    )
+    mark(
+        verify,
+        s + marker,
+        "patched verify-denial-native-package-metadata (accepts aarch64 rpm and arm64 deb arch)",
+    )
 PY
