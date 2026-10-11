@@ -365,6 +365,17 @@ else:
             "  (cd \"$dir\" && makepkg \"$@\")\n"
             "}\n"
             "\n"
+            "# --packagelist prints one path per line, relative to makepkg's\n"
+            "# working directory. The callers below test the result from this\n"
+            "# shell's cwd, so print it absolute instead.\n"
+            "packagelist() {\n"
+            "  local dir=\"$1\"\n"
+            "  local entry\n"
+            "  while IFS= read -r entry; do\n"
+            "    printf '%s/%s\\n' \"$dir\" \"$entry\"\n"
+            "  done < <(run_makepkg \"$dir\" --packagelist)\n"
+            "}\n"
+            "\n"
         )
         helper_anchor = 'engine_package="$(makepkg --dir "$ENGINE_PACKAGE_DIR" --packagelist)"\n'
         if helper_anchor not in s:
@@ -372,17 +383,17 @@ else:
         s = s.replace(helper_anchor, helper + helper_anchor, 1)
 
     makepkg_anchor = 'engine_package="$(makepkg --dir "$ENGINE_PACKAGE_DIR" --packagelist)"\n'
-    makepkg_repl = 'engine_package="$(run_makepkg "$ENGINE_PACKAGE_DIR" --packagelist)"\n'
+    makepkg_repl = 'engine_package="$(packagelist "$ENGINE_PACKAGE_DIR")"\n'
     if makepkg_anchor in s:
         s = s.replace(makepkg_anchor, makepkg_repl, 1)
 
     denial_list_anchor = 'denial_package="$(makepkg --dir "$DENIAL_PACKAGE_DIR" --packagelist)"\n'
-    denial_list_repl = 'denial_package="$(run_makepkg "$DENIAL_PACKAGE_DIR" --packagelist)"\n'
+    denial_list_repl = 'denial_package="$(packagelist "$DENIAL_PACKAGE_DIR")"\n'
     if denial_list_anchor in s:
         s = s.replace(denial_list_anchor, denial_list_repl, 1)
 
     plugin_list_anchor = '  makepkg --dir "$PLUGIN_MANAGER_PACKAGE_DIR" --packagelist\n'
-    plugin_list_repl = '  run_makepkg "$PLUGIN_MANAGER_PACKAGE_DIR" --packagelist\n'
+    plugin_list_repl = '  packagelist "$PLUGIN_MANAGER_PACKAGE_DIR"\n'
     if plugin_list_anchor in s:
         s = s.replace(plugin_list_anchor, plugin_list_repl, 1)
 
