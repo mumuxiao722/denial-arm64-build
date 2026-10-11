@@ -131,14 +131,39 @@ jobs:
       # and each upload only reports missing files as a warning -- a target
       # that failed for its own reason should not double up as an upload error.
       #
-      # Arch and Alpine share one container. Each needs a userland of its own:
-      # on the runner makepkg aborted before printing anything, and the Alpine
-      # sandbox's bwrap --unshare-user was refused by the service. An Arch
-      # Linux container gives both a native /etc, a real pacman database and
-      # user namespaces that work. podman is already on the ubuntu-24.04-arm
-      # image, so this costs no install step.
-      - name: "Package (Arch and Alpine in a container)"
-        id: package-arch-alpine
+      # Alpine packages on the runner. Run d2b7abe did this without abuild on the
+      # host and the step passed, so denial-pc alpine-package brings what it
+      # needs with it.
+      - name: "Package (Alpine APK)"
+        id: package-alpine
+        run: ./tools/denial-pc alpine-package
+        working-directory: denial
+        # Allowed to fail so an unproven packaging path cannot block the RPM
+        # and deb targets.
+        continue-on-error: true
+
+      # Arch has two routes and neither has worked yet, so both run. The
+      # runner route is the one that has a pacman database behind makepkg,
+      # which is what the previous Ubuntu-provided makepkg lacked. The
+      # container route has the userland makepkg wants but no ARM64 image to
+      # run in.
+      - name: "Package (Arch)"
+        id: package-arch
+        run: |
+          # makepkg dies with exit 138 and prints only its generic error.
+          # bash -x names the line and the command bash was waiting on when
+          # the signal arrived. This makepkg has no --debug option.
+          set -o pipefail
+          sudo apt-get install -y --no-install-recommends arch-install-scripts
+          PS4='+ ${BASH_SOURCE##*/}:${LINENO}: '
+          bash -x ./tools/denial-pc arch-package 2>&1
+        working-directory: denial
+        env:
+          DENIAL_PC_MAKEPKG_ROOT: ${{ github.workspace }}/.denial-cache/pc-build/makepkg
+        continue-on-error: true
+
+      - name: "Package (Arch in a container)"
+        id: package-arch-container
         run: |
           set -o pipefail
           podman run --rm \
@@ -148,7 +173,6 @@ jobs:
             --env DENIAL_PC_BUILD_ROOT=/cache/pc-build \
             --env DENIAL_PC_PACKAGE_ROOT=/cache/pc-build/packages \
             --env DENIAL_PC_MAKEPKG_ROOT=/cache/pc-build/makepkg \
-            --env DENIAL_PC_ALPINE_ROOT=/cache/pc-build/alpine-package \
             --env DENIAL_PC_DEPENDENCY_ROOT=/cache/deps \
             docker.io/library/archlinux:latest \
             /bin/bash -o pipefail -c '
@@ -156,36 +180,18 @@ jobs:
               pacman -Sy --needed --noconfirm \
                 base-devel git python python-pybind11 go rust \
                 bash coreutils findutils gawk grep sed tar gzip \
-                fakeroot patchelf abuild
-              # makepkg refuses to run as root, and apabuild wants one
-              # unprivileged account too. chown the mounted trees so it can
-              # write its own caches and the package outputs.
+                fakeroot patchelf
               useradd --create-home --shell /bin/bash builder
               chown -R builder:builder /cache /denial
-
-              echo "=== arch-package ==="
-              arch_status=0
-              su builder -c "./tools/denial-pc arch-package" || arch_status=$?
-              echo "=== arch-package exited $arch_status ==="
-
-              echo "=== alpine-package ==="
-              # apabuild stages packages in a root-only chroot, so this half
-              # runs as root and gives the tree back afterwards.
-              alpine_status=0
-              ./tools/denial-pc alpine-package || alpine_status=$?
-              chown -R builder:builder /cache /denial
-              echo "=== alpine-package exited $alpine_status ==="
-
-              # Report both, and fail the step if either failed, so one
-              # broken target does not hide the other.
-              test "$arch_status" -eq 0 && test "$alpine_status" -eq 0
+              su builder -c "./tools/denial-pc arch-package"
             '
-        # Allowed to fail so an unproven packaging path cannot block the RPM
-        # and deb targets.
+        # Kept as the fallback. Arch publishes no ARM64 image, so this fails
+        # at the manifest before anything else, but it costs one pull and is
+        # the only route that would work if that changes.
         continue-on-error: true
 
       - name: "Upload Denial Arch package"
-        if: ${{ always() && steps.package-arch-alpine.outcome == 'success' }}
+        if: ${{ always() && (steps.package-arch.outcome == 'success' || steps.package-arch-container.outcome == 'success') }}
         uses: actions/upload-artifact@v7
         with:
           name: denial-arch-arm64
@@ -254,7 +260,7 @@ jobs:
           if-no-files-found: error
 
       - name: "Upload Denial APK"
-        if: ${{ always() && steps.package-arch-alpine.outcome == 'success' }}
+        if: ${{ always() && steps.package-alpine.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
           name: denial-apk-arm64
