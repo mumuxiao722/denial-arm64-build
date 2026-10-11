@@ -143,14 +143,16 @@ else:
     # that ccache's masquerade mode wants is not needed here, since GN still
     # invokes the real compiler by its own name.
     #
-    # The value has to be quoted: unquoted, gn parses it as an identifier and
-    # the whole gen fails with
+    # The value has to reach gn wrapped in double quotes: unquoted, gn parses
+    # it as an identifier and the whole gen fails with
     #   ERROR at the command-line "--args":1:2043: Undefined identifier
+    # Single quotes on the element keep the inner pair literal, since a bash
+    # double-quoted "ccache" would be stripped before gn ever saw it.
     cc_args_anchor = 'GN_ENGINE_ARGS=(\n  --slimpeller\n'
     cc_args_repl = (
         'GN_ENGINE_ARGS=(\n'
         '  --slimpeller\n'
-        '  --gn-args=cc_wrapper="ccache"\n'
+        "  '--gn-args=cc_wrapper=\"ccache\"'\n"
     )
     cc_note = ""
     if cc_args_anchor in s:
