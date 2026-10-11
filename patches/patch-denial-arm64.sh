@@ -352,10 +352,70 @@ else:
     s = s.replace(".x86_64.rpm", ".*.rpm")
     mark(rpm, s + marker, f"patched package-denial-rpm ({n} x86_64 rpm globs widened)")
 
+# ---------- tools/package-denial-arch ----------
+# The Arch adapter validates the engine package against the pinned checksum in
+# prebuilt/flutter-engine/, and names the linux-x64-release directory directly.
+# This script does not source tools/lib/denial-architecture.sh, so derive the
+# directory name the same way denial-arch does rather than reusing a variable
+# that is not in scope.
+arch_packager = repo / "tools" / "package-denial-arch"
+if patched(arch_packager):
+    print("package-denial-arch: already patched")
+else:
+    s = arch_packager.read_text()
+    arch_sha_anchor = (
+        '  cut -d\' \' -f1 \\\n'
+        '    < "$ROOT/prebuilt/flutter-engine/linux-x64-release/libflutter_engine.so.sha256"\n'
+    )
+    if arch_sha_anchor not in s:
+        sys.exit("patch: package-denial-arch engine sha anchor not found")
+    arch_sha_repl = (
+        '  cut -d\' \' -f1 \\\n'
+        '    < "$ROOT/prebuilt/flutter-engine/linux-${arch_dir}-release/libflutter_engine.so.sha256"\n'
+    )
+    s = s.replace(arch_sha_anchor, arch_sha_repl, 1)
+
+    arch_dir_anchor = 'MAKEPKG_ROOT="${DENIAL_PC_MAKEPKG_ROOT:-$BUILD_ROOT/makepkg}"\n'
+    if arch_dir_anchor not in s:
+        sys.exit("patch: package-denial-arch MAKEPKG_ROOT anchor not found")
+    arch_dir_repl = arch_dir_anchor + (
+        '\n'
+        'case "$(uname -m)" in\n'
+        '  aarch64|arm64) arch_dir=arm64 ;;\n'
+        '  x86_64|amd64) arch_dir=x64 ;;\n'
+        '  *) printf \'package-denial-arch: unsupported architecture\\n\' >&2; exit 1 ;;\n'
+        'esac\n'
+        'readonly arch_dir\n'
+    )
+    s = s.replace(arch_dir_anchor, arch_dir_repl, 1)
+    mark(
+        arch_packager,
+        s + marker,
+        "patched package-denial-arch (engine sha directory is host-arch aware)",
+    )
+
+# ---------- packaging/arch PKGBUILDs ----------
+# Every PKGBUILD restricts itself to x86_64. The payload itself is staged from
+# the host build, so only this declaration stops makepkg from accepting an
+# ARM64 tree.
+arch_pkgbuilds = sorted(repo.glob("packaging/arch/**/PKGBUILD"))
+if not arch_pkgbuilds:
+    sys.exit("patch: no packaging/arch PKGBUILD found")
+arch_pkgbuild_n = 0
+for pkgbuild in arch_pkgbuilds:
+    s = pkgbuild.read_text()
+    decl = "arch=('x86_64')\n"
+    if decl not in s:
+        sys.exit(f"patch: {pkgbuild.relative_to(repo)} arch declaration not found")
+    s = s.replace(decl, "arch=('x86_64' 'aarch64')\n", 1)
+    mark(
+        pkgbuild,
+        s + marker,
+        f"patched {pkgbuild.relative_to(repo)} (arch includes aarch64)",
+    )
+    arch_pkgbuild_n += 1
+
 # ---------- packaging/opensuse/denial.spec ----------
-# tools/package-denial-opensuse-rpm is a seven-line wrapper that sets
-# DENIAL_RPM_DISTRIBUTION=opensuse and execs package-denial-rpm, so the RPM
-# glob widening above already applies. Only the spec needs patching.
 opensuse_spec = repo / "packaging" / "opensuse" / "denial.spec"
 if patched(opensuse_spec):
     print("packaging/opensuse/denial.spec: already patched")
