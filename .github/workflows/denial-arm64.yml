@@ -131,22 +131,15 @@ jobs:
       # and each upload only reports missing files as a warning -- a target
       # that failed for its own reason should not double up as an upload error.
       #
-      # Alpine packages on the runner. Run d2b7abe did this without abuild on the
-      # host and the step passed, so denial-pc alpine-package brings what it
-      # needs with it.
-      - name: "Package (Alpine APK)"
-        id: package-alpine
-        run: ./tools/denial-pc alpine-package
-        working-directory: denial
-        # Allowed to fail so an unproven packaging path cannot block the RPM
-        # and deb targets.
-        continue-on-error: true
-
-      # Arch has two routes and neither has worked yet, so both run. The
-      # runner route is the one that has a pacman database behind makepkg,
-      # which is what the previous Ubuntu-provided makepkg lacked. The
-      # container route has the userland makepkg wants but no ARM64 image to
-      # run in.
+      # Arch packages on the runner with makepkg from arch-install-scripts, the
+      # package the Arch install medium bootstraps with. Ubuntu's own
+      # pacman-package-manager ships makepkg with no pacman database behind
+      # it, which is the likeliest reason this route aborted before printing
+      # anything.
+      #
+      # A container was the other option and cannot work: Arch publishes no
+      # ARM64 image, and its four repositories come from one pipeline over one
+      # set of rootfs archives, so there is no registry to switch to.
       - name: "Package (Arch)"
         id: package-arch
         run: |
@@ -162,40 +155,32 @@ jobs:
           DENIAL_PC_MAKEPKG_ROOT: ${{ github.workspace }}/.denial-cache/pc-build/makepkg
         continue-on-error: true
 
-      - name: "Package (Arch in a container)"
-        id: package-arch-container
-        run: |
-          set -o pipefail
-          podman run --rm \
-            --volume "$GITHUB_WORKSPACE/denial":/denial \
-            --volume "$GITHUB_WORKSPACE/.denial-cache":/cache \
-            --workdir /denial \
-            --env DENIAL_PC_BUILD_ROOT=/cache/pc-build \
-            --env DENIAL_PC_PACKAGE_ROOT=/cache/pc-build/packages \
-            --env DENIAL_PC_MAKEPKG_ROOT=/cache/pc-build/makepkg \
-            --env DENIAL_PC_DEPENDENCY_ROOT=/cache/deps \
-            docker.io/library/archlinux:latest \
-            /bin/bash -o pipefail -c '
-              set -euo pipefail
-              pacman -Sy --needed --noconfirm \
-                base-devel git python python-pybind11 go rust \
-                bash coreutils findutils gawk grep sed tar gzip \
-                fakeroot patchelf
-              useradd --create-home --shell /bin/bash builder
-              chown -R builder:builder /cache /denial
-              su builder -c "./tools/denial-pc arch-package"
-            '
-        # Kept as the fallback. Arch publishes no ARM64 image, so this fails
-        # at the manifest before anything else, but it costs one pull and is
-        # the only route that would work if that changes.
-        continue-on-error: true
-
       - name: "Upload Denial Arch package"
-        if: ${{ always() && (steps.package-arch.outcome == 'success' || steps.package-arch-container.outcome == 'success') }}
+        if: ${{ always() && steps.package-arch.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
           name: denial-arch-arm64
           path: ${{ github.workspace }}/.denial-cache/pc-build/packages/*.pkg.tar.zst
+          retention-days: 7
+          if-no-files-found: warn
+
+      # Alpine packages on the runner. Run d2b7abe did this without abuild on
+      # the host and the step passed, so denial-pc alpine-package brings what
+      # it needs with it.
+      - name: "Package (Alpine APK)"
+        id: package-alpine
+        run: ./tools/denial-pc alpine-package
+        working-directory: denial
+        # Allowed to fail so an unproven packaging path cannot block the RPM
+        # and deb targets.
+        continue-on-error: true
+
+      - name: "Upload Denial APK"
+        if: ${{ always() && steps.package-alpine.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: denial-apk-arm64
+          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/*.apk
           retention-days: 7
           if-no-files-found: warn
 
@@ -258,15 +243,6 @@ jobs:
           path: ${{ github.workspace }}/.denial-cache/pc-build/packages/*.deb
           retention-days: 7
           if-no-files-found: error
-
-      - name: "Upload Denial APK"
-        if: ${{ always() && steps.package-alpine.outcome == 'success' }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: denial-apk-arm64
-          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/*.apk
-          retention-days: 7
-          if-no-files-found: warn
 
   release:
     name: "Publish release"
