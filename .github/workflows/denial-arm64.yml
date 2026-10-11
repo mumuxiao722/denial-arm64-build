@@ -111,6 +111,29 @@ jobs:
           EOF
           makepkg --version
 
+          # makepkg aborts with "An unknown error has occurred" and exit 138
+          # before it prints anything, so the failing call is not visible in
+          # the step log. Report what makepkg can see, and exercise the same
+          # entry point the packager uses, one variable at a time.
+          echo "--- makepkg environment ---"
+          for var in BUILDDIR PKGDEST SRCDEST SRCPKGDEST PKGDEST; do
+            printf '%s=%s\n' "$var" "${!var:-<unset>}"
+          done
+          printf 'HOME=%s\n' "$HOME"
+          printf 'cwd=%s\n' "$PWD"
+          command -v fakeroot bsdtar zstd xz gzip 2>&1 || true
+
+          echo "--- makepkg --printsrcinfo on the engine PKGBUILD ---"
+          cd denial/packaging/arch/flutter-engine
+          set +e
+          makepkg --printsrcinfo 2>&1 | head -20
+          printf 'printsrcinfo exit=%s\n' "$?"
+          echo "--- makepkg --packagelist on the same PKGBUILD ---"
+          makepkg --packagelist 2>&1 | head -5
+          printf 'packagelist exit=%s\n' "$?"
+          set -e
+          cd - >/dev/null
+
       - name: "Patch Denial tooling for ARM64"
         run: patches/denial-arm64-builder.sh denial
 
@@ -165,7 +188,12 @@ jobs:
       # that failed for its own reason should not double up as an upload error.
       - name: "Package (Arch pkg.tar.zst)"
         id: package-arch
-        run: ./tools/denial-pc arch-package
+        run: |
+          # makepkg dies with exit 138 and no output, so trace the packager to
+          # see which invocation it dies on and with what arguments.
+          set -o pipefail
+          PS4='+ ${BASH_SOURCE##*/}:${LINENO}: '
+          bash -x ./tools/denial-pc arch-package 2>&1 | tail -120
         working-directory: denial
         env:
           DENIAL_PC_MAKEPKG_ROOT: ${{ github.workspace }}/.denial-cache/pc-build/makepkg
