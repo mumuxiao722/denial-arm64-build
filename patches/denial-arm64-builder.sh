@@ -136,7 +136,32 @@ else:
     else:
         print("denial-flutter-engine: no release checksum gate present, skipped")
 
-    mark(engine, s + marker, "patched denial-flutter-engine (arm64 paths, lenient metadata, DEPS hook)")
+    # Route Skia's compiler through ccache. Skia is 4525 translation units
+    # whose object files are too large to cache directly, but ccache keys on
+    # source content and flags, so a repeat run can skip the ones that did not
+    # change. cc_wrapper names ccache as the compiler; the -I/usr/lib/ccache
+    # that ccache's masquerade mode wants is not needed here, since GN still
+    # invokes the real compiler by its own name.
+    cc_args_anchor = 'GN_ENGINE_ARGS=(\n  --slimpeller\n'
+    cc_args_repl = (
+        'GN_ENGINE_ARGS=(\n'
+        '  --slimpeller\n'
+        '  --gn-args=cc_wrapper=ccache\n'
+    )
+    cc_note = ""
+    if cc_args_anchor in s:
+        s = s.replace(cc_args_anchor, cc_args_repl, 1)
+        cc_note = ", cc_wrapper=ccache for Skia"
+    else:
+        print("denial-flutter-engine: GN_ENGINE_ARGS shape changed, ccache not injected")
+
+    mark(
+        engine,
+        s + marker,
+        "patched denial-flutter-engine (arm64 paths, lenient metadata, DEPS hook"
+        + cc_note
+        + ")",
+    )
 
 # ---------- seed linux-arm64 metadata placeholders ----------
 for mode in ("debug", "profile", "release"):
