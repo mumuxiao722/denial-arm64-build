@@ -1,25 +1,35 @@
-# denial-arm64-build
+# denial-arm64-builder
 
 [中文版](README_CN.md)
 
-ARM64 build support for [Denial](https://github.com/denialwm/denial), a
-Flutter-native Wayland compositor.
+Builds [Denial](https://github.com/denialwm/denial), a Flutter-native Wayland
+compositor, for ARM64 and packages it for five distributions.
 
 Upstream's `tools/denial-pc` build system targets x86-64 and does not support
-ARM64. This repository carries the patches that make Denial build on aarch64
-with a source-built Flutter engine, so the result can be installed on ARM64
-hardware.
+ARM64. This repository patches it for aarch64 with a source-built Flutter
+engine, runs the build on an ARM64 CI runner, and uploads the RPM, deb, APK
+and Arch packages that come out.
 
-These patches were developed inside
-[fedora-sheng](https://github.com/mumuxiao722/fedora-sheng), where they lived
-under `.github/denial-arm64/`. They now live here so that any distribution can
-consume the same patch set without adopting the rest of that image builder.
+The patch set was developed inside
+[fedora-sheng](https://github.com/mumuxiao722/fedora-sheng), where it lived
+under `.github/denial-arm64/`. It now lives here so that any distribution can
+consume the same patches without adopting the rest of that image builder.
 
 ## Supported Denial versions
+
+This repository tracks one tag at a time. The tracked ref is the repository
+variable `DENIAL_REF`:
+
+```sh
+gh variable set DENIAL_REF --body v0.5.0
+```
 
 | Denial tag | Patch set |
 | --- | --- |
 | `v0.5.0` | current |
+
+Every cache key derives from that variable, so moving to a new release
+invalidates the engine and build caches automatically.
 
 ## Usage
 
@@ -27,15 +37,17 @@ Check out the Denial tag you want to build and apply the patches:
 
 ```sh
 git clone --branch v0.5.0 https://github.com/denialwm/denial.git denial
-patches/patch-denial-arm64.sh denial
+patches/denial-arm64-builder.sh denial
 ```
 
-The script is idempotent: running it again reports each target as already
-patched. Every substitution is anchored, so if an upstream refactor moves the
-patched code the script exits with the name of the anchor it could not find
-rather than applying a partial change.
+The patch set is anchored to the shapes that the tracked tag ships. The script
+is idempotent: running it again reports each target as already patched. If a
+future upstream release reshapes any anchored code the script exits naming the
+anchor it could not find, rather than applying a partial change.
 
 ## What the patches cover
+
+Build system:
 
 - `tools/denial-flutter-engine` — aarch64 GN arguments, ARM64 build paths,
   DEPS hook for the engine checkout
@@ -44,11 +56,20 @@ rather than applying a partial change.
 - `tools/stage-denial-runtime` — host-CPU aware bundle and engine paths,
   lenient engine SHA-256
 - `tools/prepare-denial-plugin-kit` — lenient engine checksum
-- `tools/package-denial-rpm` — widened RPM globs
-- `packaging/fedora/denial.spec` — `ExclusiveArch` includes aarch64
-- `tools/verify-denial-native-package-metadata` — accepts an aarch64 RPM arch
+- `patches/patch-deps.py` — applied during `gclient sync`
 
-`patches/patch-deps.py` is applied by the engine patch during `gclient sync`.
+Packaging:
+
+- `packaging/fedora/denial.spec` — `ExclusiveArch` includes aarch64
+- `packaging/opensuse/denial.spec` — `ExclusiveArch` includes aarch64
+- `tools/package-denial-rpm` — widened RPM globs
+- `tools/package-denial-deb` — Debian architecture derived from `uname -m`
+  instead of a literal `amd64`, in both the control fields and the output
+  filenames
+- `tools/package-denial-arch` — engine checksum read from the host-arch
+  directory rather than `linux-x64-release`
+- `packaging/arch/**/PKGBUILD` — `arch=('x86_64' 'aarch64')`
+- `tools/verify-denial-native-package-metadata` — accepts an aarch64 RPM arch
 
 ## ARM64 placeholder metadata
 
@@ -59,12 +80,47 @@ documentation from the x86-64 directory. Denial's own checks compare against
 these files; the patches make an empty baseline skip the comparison instead of
 failing.
 
+## Building
+
+The workflow runs on `ubuntu-24.04-arm` and is dispatched manually, or on a
+push touching `patches/`. It takes `publish_release` (default off) as its only
+input; everything else derives from `DENIAL_REF`.
+
+Two caches are maintained, each saved at the step that produces it so a later
+failure does not discard the work:
+
+- `denial-engine-cache-<ref>` — the Flutter engine, saved right after
+  `denial-flutter-engine build`. A cold build costs over 40 minutes.
+- `denial-build-<ref>-<run>` — the staged runtime tree and the Rust output,
+  saved after staging. On a hit, `denial-pc build` and staging are skipped.
+
+Both saves require `success()`, so a failed build never caches a partial tree.
+
+Packaging targets, all from the same staged payload. Fedora and openSUSE
+produce the same RPM filenames, so they are kept apart by directory when
+packaging and by artifact name when uploading:
+
+| Command | Uploaded as | Matched by |
+| --- | --- | --- |
+| `denial-pc fedora-package` | `denial-rpm-fedora-arm64` | `packages/denial-[0-9]*.rpm` |
+| `denial-pc opensuse-package` | `denial-rpm-opensuse-arm64` | `packages/opensuse/denial-[0-9]*.rpm` |
+| `denial-pc debian-package` | `denial-deb-arm64` | `packages/*.deb` |
+| `denial-pc alpine-package` | `denial-apk-arm64` | `packages/*.apk` |
+| `denial-pc arch-package` | `denial-arch-arm64` | `packages/*.pkg.tar.zst` |
+
+The RPM and deb patterns catch only the compositor; the Flutter engine ships as
+its own package. Each RPM target therefore uploads a second artifact:
+
+| Artifact | Matched by |
+| --- | --- |
+| `denial-flutter-engine-rpm-fedora-arm64` | `packages/denial-flutter-engine-*.rpm` |
+| `denial-flutter-engine-rpm-opensuse-arm64` | `packages/opensuse/denial-flutter-engine-*.rpm` |
+
 ## Consumers
 
-`mumuxiao722/fedora-sheng` applies this patch set in its `build-denial` job and
-produces installable RPMs. It checks out this repository and runs
-`patches/patch-denial-arm64.sh` against its Denial checkout rather than
-carrying its own copy.
+`mumuxiao722/fedora-sheng` carries a copy of this patch set under
+`.github/denial-arm64/` and applies it in its `build-denial` job to produce
+installable RPMs for the Xiaomi Pad 6S Pro image.
 
 ## License
 
