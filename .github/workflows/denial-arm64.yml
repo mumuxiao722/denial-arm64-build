@@ -1,0 +1,127 @@
+# Build Denial from source on ARM64 and verify the patch set applies cleanly.
+#
+# Upstream's tools/denial-pc build system targets x86-64. This workflow runs it
+# on an ARM64 runner with the patches from patches/ applied.
+
+name: Build Denial (ARM64)
+
+on:
+  workflow_dispatch:
+    inputs:
+      denial_ref:
+        description: 'Denial tag or ref'
+        type: string
+        default: 'v0.5.0'
+      engine_cache:
+        description: 'Restore the Flutter engine cache'
+        type: boolean
+        default: true
+
+  push:
+    branches: [ main ]
+    paths:
+      - 'patches/**'
+
+jobs:
+  build-denial:
+    name: "Build Denial (${{ inputs.denial_ref }}, ARM64)"
+    runs-on: ubuntu-24.04-arm
+
+    env:
+      DENIAL_PC_DEPENDENCY_ROOT: ${{ github.workspace }}/.denial-cache/deps
+      DENIAL_PC_BUILD_ROOT: ${{ github.workspace }}/.denial-cache/pc-build
+      DENIAL_FLUTTER_ENGINE_CACHE_ROOT: ${{ github.workspace }}/.denial-cache/engine
+      DENIAL_FLUTTER_ENGINE_JOBS: 2
+
+    steps:
+      - name: "Checkout Repo"
+        uses: actions/checkout@v7
+
+      - name: "Checkout Denial (${{ inputs.denial_ref }})"
+        uses: actions/checkout@v7
+        with:
+          repository: denialwm/denial
+          ref: ${{ inputs.denial_ref }}
+          path: denial
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: "Restore Denial engine cache"
+        id: engine-cache-restore
+        if: ${{ inputs.engine_cache }}
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            ${{ github.workspace }}/.denial-cache/engine/artifacts
+            ${{ github.workspace }}/.denial-cache/engine/state
+          key: denial-engine-cache-${{ inputs.denial_ref }}
+          restore-keys: |
+            denial-engine-cache-${{ inputs.denial_ref }}
+
+      - name: "Install Build Tools"
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            git curl tar xz-utils zip unzip \
+            build-essential cmake ninja-build pkg-config \
+            clang llvm libclang-dev \
+            rustup \
+            libglvnd-dev libegl1-mesa-dev mesa-common-dev \
+            libdrm-dev libgbm-dev libgles-dev libsdl2-dev \
+            libinput-dev libudev-dev libxkbcommon-dev libseat-dev \
+            libglib2.0-dev libgtk-3-dev fontconfig \
+            libpolkit-agent-1-dev \
+            rpm rpm2cpio libarchive-tools
+
+      - name: "Add Rust toolchain"
+        run: |
+          rustup default stable
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: "Patch Denial tooling for ARM64"
+        run: patches/patch-denial-arm64.sh denial
+
+      - name: "Denial doctor (host prerequisite check)"
+        run: ./tools/denial-pc doctor || true
+        working-directory: denial
+
+      - name: "Bootstrap Denial tooling"
+        run: ./tools/denial-pc bootstrap
+        working-directory: denial
+
+      - name: "Build Flutter engine (cacheable)"
+        run: ./tools/denial-flutter-engine build
+        working-directory: denial
+
+      - name: "Build Denial"
+        run: ./tools/denial-pc build
+        working-directory: denial
+
+      - name: "Package RPMs"
+        run: ./tools/denial-pc fedora-package
+        working-directory: denial
+
+      - name: "Upload Denial RPM"
+        uses: actions/upload-artifact@v7
+        with:
+          name: denial-rpm-arm64
+          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/denial-[0-9]*.rpm
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: "Upload Denial Flutter Engine RPM"
+        uses: actions/upload-artifact@v7
+        with:
+          name: denial-flutter-engine-rpm-arm64
+          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/denial-flutter-engine-*.rpm
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: "Save Denial engine cache"
+        if: ${{ always() && steps.engine-cache-restore.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            ${{ github.workspace }}/.denial-cache/engine/artifacts
+            ${{ github.workspace }}/.denial-cache/engine/state
+          key: ${{ steps.engine-cache-restore.outputs.cache-primary-key }}
