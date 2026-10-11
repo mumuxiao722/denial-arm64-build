@@ -79,26 +79,20 @@ jobs:
             rpm rpm2cpio libarchive-tools \
             jq bubblewrap \
             makepkg fakeroot \
-            ccache sccache
+            sccache
 
-      # Skia and the Rust workspace are rebuilt on every run because their
-      # object trees are past the repository's 10 GB cache quota. ccache and
-      # sccache keep the compiled results instead, keyed on source content and
-      # compiler flags, so a repeat run recompiles only what changed.
-      - name: "Set up ccache"
-        run: |
-          echo "CCACHE_DIR=$HOME/.cache/ccache" >> "$GITHUB_ENV"
-          # Paths are rewritten relative to the workspace so a cache written
-          # on one runner matches a build in a differently named directory.
-          # base_dir must not be "/": that would rewrite system header paths.
-          echo "CCACHE_BASEDIR=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
-          # Checkouts carry fresh mtimes, so the default mtime check would
-          # miss every time. Compare the compiler binary's contents instead.
-          echo "CCACHE_COMPILERCHECK=content" >> "$GITHUB_ENV"
-          echo "CCACHE_COMPRESS=true" >> "$GITHUB_ENV"
-          echo "CCACHE_MAXSIZE=4G" >> "$GITHUB_ENV"
-          mkdir -p "$HOME/.cache/ccache"
-
+      # Build Denial is 57 minutes of cargo compiling a few hundred crates.
+      # Two things keep a repeat run from paying that again:
+      #
+      #  - sccache, which keys each crate on its source and flags and stores
+      #    through SCCACHE_GHA_ENABLED rather than a directory restored here.
+      #  - the cargo target directory itself, which lets cargo skip even the
+      #    work of deciding what is stale.
+      #
+      # ccache is deliberately not wired to anything. The engine cache holds a
+      # finished libflutter_engine.so, so on a hit Skia is never compiled and
+      # there is nothing for a C++ cache to hold; on a miss Skia's objects run
+      # to tens of gigabytes, past the repository quota.
       - name: "Set up sccache"
         run: |
           mkdir -p "$HOME/.cache/sccache"
@@ -110,15 +104,19 @@ jobs:
           echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
           echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
 
-      # sccache keeps its own store through SCCACHE_GHA_ENABLED, so only
-      # ccache's directory is restored here.
-      - name: "Restore ccache"
+      # sccache keeps its own store through SCCACHE_GHA_ENABLED. This is the
+      # cargo target directory, which lets cargo skip the dependency walk
+      # entirely rather than re-resolving every crate through sccache.
+      - name: "Restore Rust target"
+        id: rust-target-restore
         uses: actions/cache/restore@v5
         with:
-          path: ~/.cache/ccache
-          key: ccache-${{ vars.DENIAL_REF }}-${{ github.run_id }}
+          path: |
+            ${{ github.workspace }}/.denial-cache/pc-build/rust
+            ${{ github.workspace }}/.denial-cache/pc-build/native-app
+          key: rust-target-${{ vars.DENIAL_REF }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            ccache-${{ vars.DENIAL_REF }}-
+            rust-target-${{ vars.DENIAL_REF }}-
 
       - name: "Add Rust toolchain"
         run: |
@@ -197,20 +195,21 @@ jobs:
         run: ./tools/denial-pc build
         working-directory: denial
 
-      # Saved after both compilers have run, so the next run restores a cache
-      # populated by a complete build rather than a partial one. sccache saves
-      # itself through SCCACHE_GHA_ENABLED and is not part of this path.
-      - name: "Save ccache"
+      # Saved after cargo has run, so the next run restores a target directory
+      # that a complete build produced. sccache saves itself through
+      # SCCACHE_GHA_ENABLED and is not part of this path.
+      - name: "Save Rust target"
         if: ${{ success() }}
         uses: actions/cache/save@v5
         with:
-          path: ~/.cache/ccache
-          key: ccache-${{ vars.DENIAL_REF }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ github.workspace }}/.denial-cache/pc-build/rust
+            ${{ github.workspace }}/.denial-cache/pc-build/native-app
+          key: rust-target-${{ vars.DENIAL_REF }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: "Report compiler cache"
         if: ${{ always() }}
         run: |
-          ccache --show-stats || true
           sccache --show-stats || true
 
       - name: "Stage runtime"
@@ -224,11 +223,14 @@ jobs:
       - name: "Package (Arch pkg.tar.zst)"
         id: package-arch
         run: |
-          # makepkg dies with exit 138 and no output, so trace the packager to
-          # see which invocation it dies on and with what arguments.
+          # makepkg dies with exit 138 and prints only its generic error.
+          # bash -x already names the line and the command bash was waiting
+          # on when the signal arrived; the earlier tail -120 is what threw
+          # that away. Keep the whole trace. This makepkg has no --debug
+          # option, its man page lists none.
           set -o pipefail
           PS4='+ ${BASH_SOURCE##*/}:${LINENO}: '
-          bash -x ./tools/denial-pc arch-package 2>&1 | tail -120
+          bash -x ./tools/denial-pc arch-package 2>&1
         working-directory: denial
         env:
           DENIAL_PC_MAKEPKG_ROOT: ${{ github.workspace }}/.denial-cache/pc-build/makepkg
