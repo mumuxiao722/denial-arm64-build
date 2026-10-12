@@ -22,7 +22,7 @@ The workflow tracks one Denial tag at a time. The tracked ref is the repository
 variable `DENIAL_REF`:
 
 ```sh
-gh variable set DENIAL_REF --body v0.6.0
+gh variable set DENIAL_REF --body v0.5.0
 ```
 
 Every cache key derives from it, so moving to another release invalidates the
@@ -45,6 +45,37 @@ patched build system calls the same file with `patch-deps` to rewrite the
 
 The diff carries the whole change set against `v0.5.0`, so what it does is
 readable with `git diff` afterwards.
+
+## Host tools
+
+Building needs a C++ and Flutter toolchain: CMake, Ninja, pkg-config, Rust,
+and the development headers for EGL, GL, GBM, GLES, SDL2, input, udev,
+xkbcommon, seat, GLib, GTK and fontconfig. Install them with whatever your
+distribution uses.
+
+`bsdtar` is needed too, by three of the four packaging scripts. `tar` cannot
+replace it: an APK is several gzip streams concatenated, and GNU tar stops
+after the first one, so it never reaches the `.PKGINFO` or the signature
+behind it.
+
+Rust takes two steps: install `rustup`, then run `rustup default stable`, and
+make sure `cargo` is on your `PATH` afterwards.
+
+Each packaging script checks for its own tools and stops if one is missing, so
+this is the list it checks:
+
+| Target | Needs |
+|---|---|
+| Fedora, openSUSE | `rpmbuild`, `rpm`, `rpm2cpio` |
+| Debian, Ubuntu | `dpkg-deb` |
+| Arch | `makepkg`, `pacman` |
+| Alpine | `bwrap` |
+
+The APK is for Alpine, but it is not built on Alpine. `package-denial-apk`
+downloads an Alpine root filesystem and runs `abuild` inside it with `bwrap`,
+so the build itself happens from an ordinary glibc host. `gcompat` is a
+runtime dependency of the package that comes out, because Alpine runs on musl
+and that package needs the glibc compatibility layer.
 
 ## Building
 

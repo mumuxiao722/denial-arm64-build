@@ -20,7 +20,7 @@ GitHub Actions 工作流——在 ARM64 runner 上构建打过补丁的源码树
 工作流只追踪一个 Denial tag。被追踪的 ref 是仓库变量 `DENIAL_REF`：
 
 ```sh
-gh variable set DENIAL_REF --body v0.6.0
+gh variable set DENIAL_REF --body v0.5.0
 ```
 
 所有缓存键都由它派生，所以换到新版本会让引擎缓存自动失效。其他地方都不需要改动。
@@ -40,6 +40,31 @@ minirootfs 换成 aarch64；打过补丁的构建系统会用同一个文件、�
 参数，去改写 `gclient sync` 拉取的 `DEPS`。
 
 这个 diff 包含针对 `v0.5.0` 的全部改动，所以打完之后用 `git diff` 就能看清它做了什么。
+
+## 宿主工具
+
+构建阶段需要一套 C++ 与 Flutter 工具链：CMake、Ninja、pkg-config、Rust，以及
+EGL、GL、GBM、GLES、SDL2、input、udev、xkbcommon、seat、GLib、GTK 和 fontconfig
+的开发头文件。按你自己的发行版方式装即可。
+
+还需要 `bsdtar`，四个打包脚本里有三个要它。`tar` 替代不了：一个 APK 是好几段 gzip 流
+拼起来的，而 GNU tar 读到第一段就停，看不到后面流里的 `.PKGINFO` 和签名。
+
+Rust 要两步：先装 `rustup`，再跑 `rustup default stable`，之后确保 `cargo` 在 `PATH` 里。
+
+每个打包脚本都会检查自己需要的工具，缺一个就退出，所以这就是它检查的清单：
+
+| 目标 | 需要 |
+|---|---|
+| Fedora、openSUSE | `rpmbuild`、`rpm`、`rpm2cpio` |
+| Debian、Ubuntu | `dpkg-deb` |
+| Arch | `makepkg`、`pacman` |
+| Alpine | `bwrap` |
+
+APK 是给 Alpine 用的，但不是在 Alpine 上构建的。`package-denial-apk` 会下载一个
+Alpine 根文件系统，用 `bwrap` 在里面跑 `abuild`，所以构建过程本身是在普通的 glibc
+宿主上进行的。产出包的运行时依赖里有 `gcompat`，因为 Alpine 用的是 musl libc，这个包
+需要 glibc 兼容层。
 
 ## 构建
 

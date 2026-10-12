@@ -63,11 +63,14 @@ jobs:
           restore-keys: |
             denial-engine-cache-${{ vars.DENIAL_REF }}
 
-      # Package each distribution from this step's toolchain. A host tool that
-      # more than one target declares belongs here rather than beside one of
-      # them: bsdtar is required by package-denial-rpm, package-denial-apk and
-      # package-denial-arch, and keeping it in the Arch step only worked while
-      # Arch happened to run first.
+      # The build toolchain. bsdtar is here rather than in the Arch step
+      # because package-denial-rpm, package-denial-apk and package-denial-arch
+      # all require it, and it only worked in one step while Arch happened to
+      # run first. The tools a single target needs stay with that target.
+      #
+      # The APK target is not packaged on Alpine: its APKBUILD declares
+      # gcompat as a runtime dependency, so it is built for other systems from
+      # this ordinary glibc host.
       - name: "Install Build Tools"
         run: |
           sudo apt-get update
@@ -81,8 +84,12 @@ jobs:
             libinput-dev libudev-dev libxkbcommon-dev libseat-dev \
             libglib2.0-dev libgtk-3-dev fontconfig \
             libpolkit-agent-1-dev \
-            rpm rpm2cpio libarchive-tools \
-            jq bubblewrap
+            jq \
+            # bsdtar for package-denial-rpm, package-denial-apk and
+            # package-denial-arch. Not tar: an APK is several gzip streams
+            # concatenated, and GNU tar stops after the first one, so it
+            # cannot see the .PKGINFO or the signature that follows.
+            libarchive-tools
 
       - name: "Add Rust toolchain"
         run: |
@@ -160,6 +167,9 @@ jobs:
           # bind builds an empty root and then fails on execvp, which says
           # nothing about the packaging.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          # bwrap is the one tool only this target needs, so it is installed
+          # here rather than in the shared build step.
+          sudo apt-get install -y --no-install-recommends bubblewrap
           ./tools/denial-pc alpine-package
         working-directory: denial
         # Allowed to fail so an unproven packaging path cannot block the RPM
@@ -173,6 +183,11 @@ jobs:
           path: ${{ github.workspace }}/.denial-cache/pc-build/packages/*.apk
           retention-days: 7
           if-no-files-found: error
+
+      # rpm and rpmbuild are wanted by both RPM targets and by neither of the
+      # other three.
+      - name: "Install RPM tools"
+        run: sudo apt-get install -y --no-install-recommends rpm
 
       - name: "Package (Fedora RPM)"
         id: package-fedora
