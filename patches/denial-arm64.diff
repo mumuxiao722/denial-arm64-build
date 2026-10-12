@@ -107,7 +107,7 @@ index f1410b7..cdf1657 100644
  - Add the native openSUSE package adapter.
 +# DENIAL_ARM64_PATCHED
 diff --git a/tools/denial-flutter-engine b/tools/denial-flutter-engine
-index 2d07829..06835c9 100755
+index 2d07829..089b840 100755
 --- a/tools/denial-flutter-engine
 +++ b/tools/denial-flutter-engine
 @@ -228,7 +228,7 @@ canonicalize_engine_build_id() (
@@ -166,15 +166,29 @@ index 2d07829..06835c9 100755
      install -m 0755 -- "$source" "$destination"
    done
    printf 'Staged verified Flutter engines into prebuilt/ for local builds: %s\n' "$key"
-@@ -624,6 +629,7 @@ sync_managed_checkout() (
- 
-   cd "$CHECKOUT"
-   if [[ "$DENIAL_ARCH" != aarch64 ]]; then
-+    python3 "$ROOT/../patches/arm64-prep.py" "$CHECKOUT/DEPS"
-     PATH="$DEPOT_TOOLS/.cipd_bin:$DEPOT_TOOLS:$PATH" \
-       DEPOT_TOOLS_UPDATE=0 \
-       VPYTHON_VIRTUALENV_ROOT="$VPYTHON_CACHE_ROOT" \
-@@ -756,6 +762,7 @@ prepare_checkout() {
+@@ -639,20 +644,7 @@ sync_managed_checkout() (
+   filtered_deps="$(mktemp -- "$CHECKOUT/.DEPS.arm64.XXXXXX")"
+   trap 'git -c core.hooksPath=/dev/null checkout --quiet -- DEPS; rm -f -- "$filtered_deps"' \
+     EXIT HUP INT TERM
+-  if ! awk '
+-      BEGIN { skipping = 0; blocks = 0 }
+-      $0 == "  '\''engine/src/flutter/third_party/java/openjdk'\'': {" {
+-        skipping = 1
+-        blocks++
+-        next
+-      }
+-      skipping && $0 == "   }," { skipping = 0; next }
+-      !skipping { print }
+-      END { if (skipping || blocks != 1) exit 1 }
+-    ' DEPS >"$filtered_deps"; then
+-    fail 'could not isolate the Flutter OpenJDK dependency for ARM64 sync'
+-  fi
+-  chmod --reference=DEPS "$filtered_deps"
++  python3 "$ROOT/../patches/arm64-prep.py" patch-deps DEPS "$filtered_deps"
+   mv -- "$filtered_deps" DEPS
+   PATH="$DEPOT_TOOLS/.cipd_bin:$DEPOT_TOOLS:$PATH" \
+     DEPOT_TOOLS_UPDATE=0 \
+@@ -756,6 +748,7 @@ prepare_checkout() {
        DEPOT_TOOLS_UPDATE=0 \
        VPYTHON_VIRTUALENV_ROOT="$VPYTHON_CACHE_ROOT" \
        gclient runhooks
@@ -182,7 +196,7 @@ index 2d07829..06835c9 100755
    )
  
    checkout_matches_lock \
-@@ -780,7 +787,7 @@ build_artifacts() {
+@@ -780,7 +773,7 @@ build_artifacts() {
    artifact_dir="$(artifact_dir_for_key "$key")"
    build_root="$CHECKOUT/engine/src"
    checkout_depot="$build_root/flutter/third_party/depot_tools"
@@ -191,7 +205,7 @@ index 2d07829..06835c9 100755
    staging="$ARTIFACT_ROOT/.${key}.$$"
  
    [[ -x "$checkout_depot/vpython3" ]] \
-@@ -799,7 +806,7 @@ build_artifacts() {
+@@ -799,7 +792,7 @@ build_artifacts() {
    for mode in "${MODES[@]}"; do
      target="denial_host_$mode"
      output="$BUILD_ROOT/out/$target"
@@ -200,7 +214,7 @@ index 2d07829..06835c9 100755
      printf 'Generating %s engine build graph\n' "$mode"
      (
        cd "$build_root"
-@@ -807,6 +814,8 @@ build_artifacts() {
+@@ -807,6 +800,8 @@ build_artifacts() {
          DEPOT_TOOLS_UPDATE=0 \
          VPYTHON_VIRTUALENV_ROOT="$VPYTHON_CACHE_ROOT" \
          ./flutter/tools/gn \
@@ -209,7 +223,7 @@ index 2d07829..06835c9 100755
            --runtime-mode="$mode" \
            "${GN_ENGINE_ARGS[@]}" \
            --out-dir="$BUILD_ROOT" \
-@@ -837,8 +846,9 @@ build_artifacts() {
+@@ -837,8 +832,9 @@ build_artifacts() {
        "$mode" \
        "$output/libflutter_engine.so" \
        "$llvm_objcopy"
@@ -221,7 +235,7 @@ index 2d07829..06835c9 100755
        || fail "$mode engine checksum differs from committed metadata; after a deliberate source-lock advance run '$0 refresh-metadata'"
      verify_engine_exports "$output/libflutter_engine.so" \
        || fail "$mode engine is missing a required embedder export"
-@@ -895,14 +905,14 @@ refresh_metadata() {
+@@ -895,14 +891,14 @@ refresh_metadata() {
  
    build_root="$CHECKOUT/engine/src"
    checkout_depot="$build_root/flutter/third_party/depot_tools"
@@ -238,7 +252,7 @@ index 2d07829..06835c9 100755
      install -d -m 0700 "$metadata_stage/$mode"
      printf 'Refreshing %s engine build metadata\n' "$mode"
      (
-@@ -911,6 +921,8 @@ refresh_metadata() {
+@@ -911,6 +907,8 @@ refresh_metadata() {
          DEPOT_TOOLS_UPDATE=0 \
          VPYTHON_VIRTUALENV_ROOT="$VPYTHON_CACHE_ROOT" \
          ./flutter/tools/gn \
@@ -247,7 +261,7 @@ index 2d07829..06835c9 100755
            --runtime-mode="$mode" \
            "${GN_ENGINE_ARGS[@]}" \
            --out-dir="$BUILD_ROOT" \
-@@ -949,13 +961,13 @@ refresh_metadata() {
+@@ -949,13 +947,13 @@ refresh_metadata() {
    for mode in "${MODES[@]}"; do
      install -m 0644 \
        "$metadata_stage/$mode/args.gn" \
@@ -264,7 +278,7 @@ index 2d07829..06835c9 100755
    done
    printf 'Refreshed tracked Flutter engine metadata for source lock %s\n' \
      "$(file_sha256 "$SOURCE_LOCK")"
-@@ -1027,7 +1039,7 @@ run_flutter_tests() {
+@@ -1027,7 +1025,7 @@ run_flutter_tests() {
      || fail "lock-matched Flutter test launcher is missing: $flutter_test_command"
    local_engine_src_path="$BUILD_ROOT"
    output="$BUILD_ROOT/out/$target"
@@ -273,7 +287,7 @@ index 2d07829..06835c9 100755
  
    printf 'Generating lock-matched Flutter test build graph\n'
    (
-@@ -1036,6 +1048,8 @@ run_flutter_tests() {
+@@ -1036,6 +1034,8 @@ run_flutter_tests() {
        DEPOT_TOOLS_UPDATE=0 \
        VPYTHON_VIRTUALENV_ROOT="$VPYTHON_CACHE_ROOT" \
        ./flutter/tools/gn \
@@ -282,7 +296,7 @@ index 2d07829..06835c9 100755
          --runtime-mode=debug \
          "${GN_ENGINE_ARGS[@]}" \
          --out-dir="$BUILD_ROOT" \
-@@ -1113,6 +1127,8 @@ prepare_app_build() {
+@@ -1113,6 +1113,8 @@ prepare_app_build() {
        DEPOT_TOOLS_UPDATE=0 \
        VPYTHON_VIRTUALENV_ROOT="$VPYTHON_CACHE_ROOT" \
        ./flutter/tools/gn \
@@ -291,7 +305,7 @@ index 2d07829..06835c9 100755
          "${GN_ARCH_ARGS[@]}" \
          --runtime-mode=release \
          "${GN_ENGINE_ARGS[@]}" \
-@@ -1162,7 +1178,7 @@ prepare_app_build() {
+@@ -1162,7 +1164,7 @@ prepare_app_build() {
      "$llvm_objcopy"
    verify_engine_exports "$output/libflutter_engine.so" \
      || fail 'release engine is missing a required embedder export'
@@ -300,7 +314,7 @@ index 2d07829..06835c9 100755
      [[ "$(file_sha256 "$output/libflutter_engine.so")" \
        == "$(awk 'NR == 1 { print $1 }' "$NATIVE_RELEASE_ENGINE_DIR/libflutter_engine.so.sha256")" ]] \
        || fail "release engine checksum differs from committed metadata; after a deliberate source-lock advance run '$0 refresh-metadata'"
-@@ -1195,7 +1211,7 @@ prepare_development_sdk() {
+@@ -1195,7 +1197,7 @@ prepare_development_sdk() {
    for mode in debug profile; do
      target="denial_host_$mode"
      output="$BUILD_ROOT/out/$target"
@@ -309,7 +323,7 @@ index 2d07829..06835c9 100755
  
      printf 'Generating lock-matched %s development SDK build graph\n' "$mode"
      (
-@@ -1204,6 +1220,8 @@ prepare_development_sdk() {
+@@ -1204,6 +1206,8 @@ prepare_development_sdk() {
          DEPOT_TOOLS_UPDATE=0 \
          VPYTHON_VIRTUALENV_ROOT="$VPYTHON_CACHE_ROOT" \
          ./flutter/tools/gn \
@@ -318,7 +332,7 @@ index 2d07829..06835c9 100755
            --runtime-mode="$mode" \
            "${GN_ENGINE_ARGS[@]}" \
            --out-dir="$BUILD_ROOT" \
-@@ -1349,3 +1367,4 @@ main() {
+@@ -1349,3 +1353,4 @@ main() {
  if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
    main "$@"
  fi

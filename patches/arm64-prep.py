@@ -1,43 +1,27 @@
 #!/usr/bin/env python3
 """Preparation steps for the ARM64 patch set.
 
-Two jobs that a diff cannot express, kept behind one entry point.
-
-patch-deps
-    Edits the DEPS file that `gclient sync` fetches. DEPS is not part of the
-    Denial repository, so it is rewritten during the checkout rather than
-    patched beforehand. The ARM64 checkout cannot fetch the openjdk CIPD
-    package and has no use for the Fuchsia dependencies.
+Two jobs that a diff cannot express, because both act on files outside the
+Denial repository.
 
 seed-prebuilt
     Creates the ARM64 prebuilt metadata directories that Denial's own checks
     read. They are new files, so a diff could carry them, but their bulk is
     three copies of a 30,000-line upstream licence file and would bury the
-    667 lines of actual change.
+    667 lines of actual change. Run once, right after applying the diff.
 
-The patched build system runs this with the patch-deps command; with no
-command at all patch-deps is the default, since that is how the diff wires
-it up. seed-prebuilt is meant to be run once, right after the diff is
-applied.
+patch-deps
+    Rewrites the DEPS file that gclient sync resolves against, dropping the
+    one dependency Flutter publishes only for linux-amd64. DEPS is fetched
+    into the cache checkout rather than tracked, so it cannot be patched
+    beforehand. Run by the patched denial-flutter-engine during sync, which
+    supplies both paths.
 """
 import os
 import shutil
 import sys
 
-OPENJDK_BLOCK = (
-    "  'engine/src/flutter/third_party/java/openjdk': {\n"
-    "     'packages': [\n"
-    "       {\n"
-    "        'package': 'flutter/java/openjdk/${{platform}}',\n"
-    "        'version': 'version:21'\n"
-    "       }\n"
-    "     ],\n"
-    "     # Always download the JDK since java is required for running the formatter.\n"
-    "     'dep_type': 'cipd',\n"
-    "   },\n"
-)
-FUCHSIA_VAR_OLD = "'download_fuchsia_deps': 'host_os == \"linux\"',\n"
-FUCHSIA_VAR_NEW = "'download_fuchsia_deps': False,\n"
+OPENJDK_KEY = "engine/src/flutter/third_party/java/openjdk"
 
 PREBUILT_MODES = ("debug", "profile", "release")
 # Left empty on purpose: the patched checks read a zero-length revision or
@@ -52,53 +36,79 @@ PREBUILT_EMPTY = (
 PREBUILT_COPIED = ("BUILD_INFO.md", "LICENSE.flutter", "LICENSE.third_party")
 
 
-def patch_deps(path):
-    with open(path, encoding="utf-8") as f:
-        s = f.read()
-    if OPENJDK_BLOCK not in s:
-        sys.exit(f"patch-deps: openjdk anchor not found in {path}")
-    s = s.replace(OPENJDK_BLOCK, "", 1)
-    if FUCHSIA_VAR_OLD not in s:
-        sys.exit(f"patch-deps: fuchsia var anchor not found in {path}")
-    s = s.replace(FUCHSIA_VAR_OLD, FUCHSIA_VAR_NEW, 1)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(s)
-    print("patch-deps: removed openjdk cipd, disabled download_fuchsia_deps")
-
-
 def seed_prebuilt(repo):
     source = os.path.join(repo, "prebuilt", "flutter-engine", "linux-x64-release")
     if not os.path.isdir(source):
-        sys.exit(f"seed-prebuilt: no x86-64 prebuilt directory to copy from: {source}")
+        sys.exit(f"arm64-prep: no x86-64 prebuilt directory to copy from: {source}")
     for mode in PREBUILT_MODES:
         target = os.path.join(repo, "prebuilt", "flutter-engine", f"linux-arm64-{mode}")
         os.makedirs(target, mode=0o755, exist_ok=True)
         for name in PREBUILT_EMPTY:
-            with open(os.path.join(target, name), "w", encoding="utf-8"):
+            path = os.path.join(target, name)
+            with open(path, "w", encoding="utf-8"):
                 pass
-            os.chmod(os.path.join(target, name), 0o644)
+            os.chmod(path, 0o644)
         for name in PREBUILT_COPIED:
             destination = os.path.join(target, name)
             shutil.copyfile(os.path.join(source, name), destination)
             os.chmod(destination, 0o644)
     print(
-        "seed-prebuilt: seeded arm64 metadata for "
-        + ", ".join(PREBUILT_MODES)
+        "arm64-prep: seeded arm64 metadata for " + ", ".join(PREBUILT_MODES)
     )
 
 
+def patch_deps(source, destination):
+    """Write source to destination without the single openjdk dependency."""
+    with open(source, encoding="utf-8") as f:
+        lines = f.read().split("\n")
+
+    begin = "  '%s': {" % OPENJDK_KEY
+    end = "   },"
+    out = []
+    blocks = 0
+    skipping = False
+    for line in lines:
+        if not skipping and line == begin:
+            skipping = True
+            blocks += 1
+            continue
+        if skipping:
+            if line == end:
+                skipping = False
+            continue
+        out.append(line)
+
+    if skipping or blocks != 1:
+        sys.exit(
+            "arm64-prep: could not isolate the Flutter openjdk dependency "
+            f"in {source}: matched {blocks} block(s)"
+        )
+
+    with open(destination, "w", encoding="utf-8") as f:
+        f.write("\n".join(out))
+    shutil.copymode(source, destination)
+    print("arm64-prep: dropped the openjdk cipd dependency from DEPS")
+
+
 def main(argv):
-    command = argv[1] if len(argv) > 1 else "patch-deps"
-    if command == "patch-deps":
-        if len(argv) < 3:
-            sys.exit("usage: arm64-prep.py patch-deps <DEPS-path>")
-        patch_deps(argv[2])
-    elif command == "seed-prebuilt":
-        if len(argv) < 3:
+    command = argv[1] if len(argv) > 1 else ""
+    if command == "seed-prebuilt":
+        if len(argv) != 3:
             sys.exit("usage: arm64-prep.py seed-prebuilt <denial-repo-dir>")
         seed_prebuilt(argv[2])
-    else:
+    elif command == "patch-deps":
+        if len(argv) != 4:
+            sys.exit(
+                "usage: arm64-prep.py patch-deps <DEPS-in> <DEPS-out>"
+            )
+        patch_deps(argv[2], argv[3])
+    elif command:
         sys.exit(f"unknown command: {command}")
+    else:
+        sys.exit(
+            "usage: arm64-prep.py {seed-prebuilt <repo> |"
+            " patch-deps <DEPS-in> <DEPS-out>}"
+        )
 
 
 if __name__ == "__main__":
