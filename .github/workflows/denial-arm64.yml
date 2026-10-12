@@ -123,6 +123,7 @@ jobs:
         working-directory: denial
 
       - name: "Stage runtime"
+        id: stage-runtime
         run: ./tools/stage-denial-runtime
         working-directory: denial
 
@@ -152,15 +153,11 @@ jobs:
           # installs under /usr/games, off PATH.
           sudo apt-get install -y --no-install-recommends \
             makepkg pacman-package-manager libarchive-tools gawk
-          # Check each command before the packaging run, so a missing one is
-          # reported by name instead of as a failure somewhere downstream.
-          for cmd in bsdtar find makepkg pacman mktemp rm; do
-            command -v "$cmd" >/dev/null || { echo "missing: $cmd"; exit 1; }
-          done
-          # --version returns before the pacman lookup, so a green --version
-          # proves nothing. --printsrcinfo runs after it.
-          echo "makepkg: $(makepkg --printsrcinfo 2>&1 | head -1)"
-          PS4='+ ${BASH_SOURCE##*/}:${LINENO}: '
+          # pacman-package-manager creates /var/lib/pacman but not its local
+          # database, and libalpm refuses to initialize without one. It does
+          # not stop the build, but it prints "failed to initialize alpm
+          # library" on every makepkg invocation, which reads like a failure.
+          sudo mkdir -p /var/lib/pacman/local
           # || exit $? so a failure inside is this step's failure. bash -x
           # writes the trace to stderr and without this the step reports
           # success whatever denial-pc returned.
@@ -183,10 +180,10 @@ jobs:
       # it needs with it.
       - name: "Package (Alpine APK)"
         id: package-alpine
-        # Each target is independent. Without always() one failure skips
-        # every step after it, so a single broken distro costs the run all
-        # four of the others that were about to succeed.
-        if: ${{ always() }}
+        # Each target is independent, so one failure must not skip the
+        # others. But they all consume what Stage runtime staged, so
+        # running them without a payload only manufactures false failures.
+        if: ${{ always() && steps.stage-runtime.conclusion == 'success' }}
         run: ./tools/denial-pc alpine-package
         working-directory: denial
         # Allowed to fail so an unproven packaging path cannot block the RPM
@@ -203,7 +200,7 @@ jobs:
 
       - name: "Package (Fedora RPM)"
         id: package-fedora
-        if: ${{ always() }}
+        if: ${{ always() && steps.stage-runtime.conclusion == 'success' }}
         run: ./tools/denial-pc fedora-package
         working-directory: denial
 
@@ -227,7 +224,7 @@ jobs:
 
       - name: "Package (openSUSE RPM)"
         id: package-opensuse
-        if: ${{ always() }}
+        if: ${{ always() && steps.stage-runtime.conclusion == 'success' }}
         run: ./tools/denial-pc opensuse-package
         working-directory: denial
 
@@ -251,7 +248,7 @@ jobs:
 
       - name: "Package (Debian/Ubuntu deb)"
         id: package-deb
-        if: ${{ always() }}
+        if: ${{ always() && steps.stage-runtime.conclusion == 'success' }}
         run: ./tools/denial-pc debian-package
         working-directory: denial
 
