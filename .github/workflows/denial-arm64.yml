@@ -132,67 +132,6 @@ jobs:
       # and each upload only reports missing files as a warning -- a target
       # that failed for its own reason should not double up as an upload error.
       #
-      # Arch packages on the runner. package-denial-arch needs bsdtar, find,
-      # makepkg, mktemp and rm. Ubuntu noble packages makepkg and libalpm for
-      # arm64 separately; arch-install-scripts is only the bootstrap scripts
-      # and carries no makepkg at all.
-      #
-      # A container was the other option and cannot work: Arch publishes no
-      # ARM64 image, and its four repositories come from one pipeline over one
-      # set of rootfs archives, so there is no registry to switch to.
-      - name: "Package (Arch)"
-        id: package-arch
-        run: |
-          set -o pipefail
-          # makepkg and pacman-package-manager are two debs from one source
-          # package, and makepkg alone is not enough: makepkg.sh resolves
-          # pacman by name at startup and kills itself with SIGUSR1 when that
-          # lookup fails, which surfaces as exit 138. --no-install-recommends
-          # suppresses pacman-package-manager's Recommends on makepkg, so both
-          # are named explicitly. The deb named pacman is the arcade game and
-          # installs under /usr/games, off PATH.
-          sudo apt-get install -y --no-install-recommends \
-            makepkg pacman-package-manager libarchive-tools gawk
-          # pacman-package-manager creates /var/lib/pacman but not its local
-          # database, and libalpm refuses to initialize without a valid one. It
-          # does not stop the build, but it prints failed to initialize alpm
-          # library on every makepkg invocation. mkdir alone is not enough:
-          # an empty directory is reported as database is incorrect version,
-          # so the database is created and then upgraded into shape.
-          sudo mkdir -p /var/lib/pacman/local
-          sudo pacman-db-upgrade
-          # || exit $? so a failure inside is this step's failure. bash -x
-          # writes the trace to stderr and without this the step reports
-          # success whatever denial-pc returned.
-          bash -x ./tools/denial-pc arch-package 2>&1 || exit $?
-          # actions/upload-artifact rejects ":<>|*\r\n" in an artifact path,
-          # because someone downloading it may be on NTFS, which cannot
-          # represent them. The runner here is ext4 and has no such problem,
-          # but the upload does. makepkg names a package with an epoch as
-          # name-epoch:pkgver-..., so only the engine package carries a colon.
-          # Rename rather than drop the epoch: pacman reads the version and
-          # architecture from .PKGINFO inside the package, not from the file
-          # name, and the epoch has to stay in that metadata for its
-          # downgrade protection. The separator is only a separator.
-          for p in "${{ github.workspace }}"/.denial-cache/pc-build/packages/*.pkg.tar.gz; do
-            [ -e "$p" ] || continue
-            case "$p" in *:*) mv -- "$p" "${p//:/+}" ;; esac
-          done
-        working-directory: denial
-        env:
-          DENIAL_PC_MAKEPKG_ROOT: ${{ github.workspace }}/.denial-cache/pc-build/makepkg
-
-      - name: "Upload Denial Arch package"
-        if: ${{ always() && steps.package-arch.outcome == 'success' }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: denial-arch-arm64
-          # Ubuntu's makepkg ships /etc/makepkg.conf with PKGEXT=.pkg.tar.gz.
-          # Arch uses .zst, which this runner does not guarantee.
-          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/*.pkg.tar.gz
-          retention-days: 7
-          if-no-files-found: error
-
       # Alpine packages on the runner. Run d2b7abe did this without abuild on
       # the host and the step passed, so denial-pc alpine-package brings what
       # it needs with it.
@@ -290,6 +229,81 @@ jobs:
         with:
           name: denial-deb-arm64
           path: ${{ github.workspace }}/.denial-cache/pc-build/packages/*.deb
+          retention-days: 7
+          if-no-files-found: error
+
+      # Arch packages on the runner. package-denial-arch needs bsdtar, find,
+      # makepkg, mktemp and rm. Ubuntu noble packages makepkg and libalpm for
+      # arm64 separately; arch-install-scripts is only the bootstrap scripts
+      # and carries no makepkg at all.
+      #
+      # A container was the other option and cannot work: Arch publishes no
+      # ARM64 image, and its four repositories come from one pipeline over one
+      # set of rootfs archives, so there is no registry to switch to.
+      - name: "Package (Arch)"
+        id: package-arch
+        run: |
+          # makepkg and pacman-package-manager are two debs from one source
+          # package, and makepkg alone is not enough: makepkg.sh resolves
+          # pacman by name at startup and kills itself with SIGUSR1 when that
+          # lookup fails, which surfaces as exit 138. --no-install-recommends
+          # suppresses pacman-package-manager's Recommends on makepkg, so both
+          # are named explicitly. The deb named pacman is the arcade game and
+          # installs under /usr/games, off PATH.
+          sudo apt-get install -y --no-install-recommends \
+            makepkg pacman-package-manager libarchive-tools gawk
+          # pacman-package-manager creates /var/lib/pacman but not its local
+          # database, and libalpm refuses to initialize without a valid one. It
+          # does not stop the build, but it prints failed to initialize alpm
+          # library on every makepkg invocation. mkdir alone is not enough:
+          # an empty directory is reported as database is incorrect version,
+          # so the database is created and then upgraded into shape.
+          sudo mkdir -p /var/lib/pacman/local
+          sudo pacman-db-upgrade
+          # || exit $? so a failure inside is this step's failure. denial-pc
+          # runs the packaging in a child process, so the shell would otherwise
+          # go on to the next command and report success whatever it returned.
+          ./tools/denial-pc arch-package 2>&1 || exit $?
+          # actions/upload-artifact rejects ":<>|*\r\n" in an artifact path,
+          # because someone downloading it may be on NTFS, which cannot
+          # represent them. The runner here is ext4 and has no such problem,
+          # but the upload does. makepkg names a package with an epoch as
+          # name-epoch:pkgver-..., so only the engine package carries a colon.
+          # Rename rather than drop the epoch: pacman reads the version and
+          # architecture from .PKGINFO inside the package, not from the file
+          # name, and the epoch has to stay in that metadata for its
+          # downgrade protection. The separator is only a separator.
+          for p in "${{ github.workspace }}"/.denial-cache/pc-build/packages/*.pkg.tar.gz; do
+            [ -e "$p" ] || continue
+            case "$p" in *:*) mv -- "$p" "${p//:/+}" ;; esac
+          done
+        working-directory: denial
+        env:
+          DENIAL_PC_MAKEPKG_ROOT: ${{ github.workspace }}/.denial-cache/pc-build/makepkg
+
+      - name: "Upload Denial Arch package"
+        if: ${{ always() && steps.package-arch.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: denial-arch-arm64
+          # Ubuntu's makepkg ships /etc/makepkg.conf with PKGEXT=.pkg.tar.gz.
+          # Arch uses .zst, which this runner does not guarantee.
+          #
+          # denial-* would also match denial-flutter-engine-* and
+          # denial-plugin-manager-*, so the two wanted packages are named
+          # outright rather than left to a pattern.
+          path: |
+            ${{ github.workspace }}/.denial-cache/pc-build/packages/denial-[0-9]*.pkg.tar.gz
+            ${{ github.workspace }}/.denial-cache/pc-build/packages/denial-flutter-engine-*.pkg.tar.gz
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: "Upload Denial Arch plugin manager"
+        if: ${{ always() && steps.package-arch.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: denial-arch-plugin-manager-arm64
+          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/denial-plugin-manager-*.pkg.tar.gz
           retention-days: 7
           if-no-files-found: error
 

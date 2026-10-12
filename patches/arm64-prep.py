@@ -54,6 +54,14 @@ ALPINE_SHA_TO = (
     "'f55a90f69052c5bd6f92cb09a8f47065970830b194c917a006fb94028e721259'"
 )
 
+# ALPINE_ARCH above says which architecture this build targets, so it is
+# replaced. APKBUILD's arch= says which architectures the package claims to
+# support, so aarch64 is added and x86_64 is kept, the way the other six
+# package definitions already do it. Replacing it instead would drop upstream
+# x86-64 support from the Alpine package alone.
+ALPINE_PKG_ARCH_FROM = 'arch="x86_64"'
+ALPINE_PKG_ARCH_TO = 'arch="x86_64 aarch64"'
+
 
 def seed_prebuilt(repo):
     source = os.path.join(repo, "prebuilt", "flutter-engine", "linux-x64-release")
@@ -109,13 +117,36 @@ def patch_deps(source, destination):
     print("arm64-prep: dropped the openjdk cipd dependency from DEPS")
 
 
-def patch_alpine(path):
-    with open(path, encoding="utf-8") as f:
-        text = f.read()
-    for name, old, new in (
-        ("ALPINE_ARCH", ALPINE_ARCH_FROM, ALPINE_ARCH_TO),
-        ("MINIROOTFS_SHA256", ALPINE_SHA_FROM, ALPINE_SHA_TO),
-    ):
+def patch_alpine(repo):
+    """Retarget the two files that hardcode x86-64 on the Alpine path.
+
+    package-denial-apk picks the minirootfs to build in, and APKBUILD declares
+    what the resulting package claims to support. Both say x86-64 upstream and
+    both have to mention aarch64, for different reasons.
+    """
+    targets = (
+        (
+            os.path.join(repo, "tools", "package-denial-apk"),
+            "ALPINE_ARCH",
+            ALPINE_ARCH_FROM,
+            ALPINE_ARCH_TO,
+        ),
+        (
+            os.path.join(repo, "tools", "package-denial-apk"),
+            "MINIROOTFS_SHA256",
+            ALPINE_SHA_FROM,
+            ALPINE_SHA_TO,
+        ),
+        (
+            os.path.join(repo, "packaging", "alpine", "APKBUILD"),
+            "arch",
+            ALPINE_PKG_ARCH_FROM,
+            ALPINE_PKG_ARCH_TO,
+        ),
+    )
+    for path, name, old, new in targets:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
         if new in text:
             continue
         count = text.count(old)
@@ -124,10 +155,9 @@ def patch_alpine(path):
                 f"arm64-prep: expected exactly one {name} definition in {path}, "
                 f"found {count}"
             )
-        text = text.replace(old, new, 1)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(text)
-    print(f"arm64-prep: retargeted the Alpine minirootfs to aarch64 in {path}")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text.replace(old, new, 1))
+    print("arm64-prep: retargeted the Alpine build to aarch64")
 
 
 def prep_checkout(repo):
@@ -137,7 +167,7 @@ def prep_checkout(repo):
     are always run together, right after the diff is applied.
     """
     seed_prebuilt(repo)
-    patch_alpine(os.path.join(repo, "tools", "package-denial-apk"))
+    patch_alpine(repo)
 
 
 def main(argv):
