@@ -89,6 +89,11 @@ jobs:
           cd denial
           git apply "$GITHUB_WORKSPACE/patches/denial-arm64.diff"
           python3 "$GITHUB_WORKSPACE/patches/arm64-prep.py" seed-prebuilt .
+          # package-denial-apk pins the x86-64 minirootfs by architecture and
+          # by digest, and verifies the download with sha256sum --strict, so
+          # both have to move together.
+          python3 "$GITHUB_WORKSPACE/patches/arm64-prep.py" patch-alpine \
+            tools/package-denial-apk
 
       - name: "Denial doctor (host prerequisite check)"
         run: ./tools/denial-pc doctor || true
@@ -189,7 +194,17 @@ jobs:
         # others. But they all consume what Stage runtime staged, so
         # running them without a payload only manufactures false failures.
         if: ${{ always() && steps.stage-runtime.conclusion == 'success' }}
-        run: ./tools/denial-pc alpine-package
+        run: |
+          # package-denial-apk runs bwrap --unshare-user twice, which has to
+          # write /proc/self/uid_map. Ubuntu 24.04 defaults
+          # kernel.apparmor_restrict_unprivileged_userns to 1, and AppArmor
+          # denies exactly that write, so bwrap exits with "setting up uid
+          # map: Permission denied". That is a policy bit, not a missing
+          # kernel feature, so turning it off is enough. See Ubuntu bug
+          # 2162114.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          bwrap --unshare-user --uid 0 --gid 0 true
+          ./tools/denial-pc alpine-package
         working-directory: denial
         # Allowed to fail so an unproven packaging path cannot block the RPM
         # and deb targets.
