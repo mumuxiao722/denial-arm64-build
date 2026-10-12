@@ -174,9 +174,11 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: denial-arch-arm64
-          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/*.pkg.tar.zst
+          # Ubuntu's makepkg ships /etc/makepkg.conf with PKGEXT=.pkg.tar.gz.
+          # Arch uses .zst, which this runner does not guarantee.
+          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/*.pkg.tar.gz
           retention-days: 7
-          if-no-files-found: warn
+          if-no-files-found: error
 
       # Alpine packages on the runner. Run d2b7abe did this without abuild on
       # the host and the step passed, so denial-pc alpine-package brings what
@@ -199,7 +201,7 @@ jobs:
           name: denial-apk-arm64
           path: ${{ github.workspace }}/.denial-cache/pc-build/packages/*.apk
           retention-days: 7
-          if-no-files-found: warn
+          if-no-files-found: error
 
       - name: "Package (Fedora RPM)"
         id: package-fedora
