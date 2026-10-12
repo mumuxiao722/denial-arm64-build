@@ -63,6 +63,11 @@ jobs:
           restore-keys: |
             denial-engine-cache-${{ vars.DENIAL_REF }}
 
+      # Package each distribution from this step's toolchain. A host tool that
+      # more than one target declares belongs here rather than beside one of
+      # them: bsdtar is required by package-denial-rpm, package-denial-apk and
+      # package-denial-arch, and keeping it in the Arch step only worked while
+      # Arch happened to run first.
       - name: "Install Build Tools"
         run: |
           sudo apt-get update
@@ -76,7 +81,7 @@ jobs:
             libinput-dev libudev-dev libxkbcommon-dev libseat-dev \
             libglib2.0-dev libgtk-3-dev fontconfig \
             libpolkit-agent-1-dev \
-            rpm rpm2cpio \
+            rpm rpm2cpio libarchive-tools \
             jq bubblewrap
 
       - name: "Add Rust toolchain"
@@ -251,7 +256,7 @@ jobs:
           # are named explicitly. The deb named pacman is the arcade game and
           # installs under /usr/games, off PATH.
           sudo apt-get install -y --no-install-recommends \
-            makepkg pacman-package-manager libarchive-tools gawk
+            makepkg pacman-package-manager gawk
           # pacman-package-manager creates /var/lib/pacman but not its local
           # database, and libalpm refuses to initialize without a valid one. It
           # does not stop the build, but it prints failed to initialize alpm
