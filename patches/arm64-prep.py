@@ -1,21 +1,24 @@
 #!/usr/bin/env python3
 """Preparation steps for the ARM64 patch set.
 
-Two jobs that a diff cannot express, because both act on files outside the
-Denial repository.
+Two commands, split by when they run and what they act on.
 
-seed-prebuilt
-    Creates the ARM64 prebuilt metadata directories that Denial's own checks
-    read. They are new files, so a diff could carry them, but their bulk is
-    three copies of a 30,000-line upstream licence file and would bury the
-    667 lines of actual change. Run once, right after applying the diff.
+prep-checkout
+    Everything the Denial checkout needs before it is built: creating the
+    ARM64 prebuilt metadata directories its own checks read, and retargeting
+    the Alpine minirootfs from x86_64 to aarch64. The prebuilt directories are
+    new files, so a diff could carry them, but their bulk is three copies of a
+    30,000-line upstream licence file and would bury the hundreds of lines of
+    actual change. The minirootfs is pinned by architecture and by digest and
+    verified with sha256sum --strict, so those two move together. Run once,
+    right after applying the diff.
 
 patch-deps
     Rewrites the DEPS file that gclient sync resolves against, dropping the
     one dependency Flutter publishes only for linux-amd64. DEPS is fetched
     into the cache checkout rather than tracked, so it cannot be patched
-    beforehand. Run by the patched denial-flutter-engine during sync, which
-    supplies both paths.
+    beforehand, and its path shares no parent with the checkout. Run by the
+    patched denial-flutter-engine during sync, which supplies both paths.
 """
 import os
 import shutil
@@ -127,29 +130,34 @@ def patch_alpine(path):
     print(f"arm64-prep: retargeted the Alpine minirootfs to aarch64 in {path}")
 
 
+def prep_checkout(repo):
+    """Everything the ARM64 checkout needs before it is built.
+
+    Both act on files inside the repo, so they take the repo directory and
+    are always run together, right after the diff is applied.
+    """
+    seed_prebuilt(repo)
+    patch_alpine(os.path.join(repo, "tools", "package-denial-apk"))
+
+
 def main(argv):
     command = argv[1] if len(argv) > 1 else ""
-    if command == "seed-prebuilt":
+    if command == "prep-checkout":
         if len(argv) != 3:
-            sys.exit("usage: arm64-prep.py seed-prebuilt <denial-repo-dir>")
-        seed_prebuilt(argv[2])
+            sys.exit("usage: arm64-prep.py prep-checkout <denial-repo-dir>")
+        prep_checkout(argv[2])
     elif command == "patch-deps":
         if len(argv) != 4:
             sys.exit(
                 "usage: arm64-prep.py patch-deps <DEPS-in> <DEPS-out>"
             )
         patch_deps(argv[2], argv[3])
-    elif command == "patch-alpine":
-        if len(argv) != 3:
-            sys.exit("usage: arm64-prep.py patch-alpine <package-denial-apk>")
-        patch_alpine(argv[2])
     elif command:
         sys.exit(f"unknown command: {command}")
     else:
         sys.exit(
-            "usage: arm64-prep.py {seed-prebuilt <repo> |"
-            " patch-deps <DEPS-in> <DEPS-out> |"
-            " patch-alpine <package-denial-apk>}"
+            "usage: arm64-prep.py {prep-checkout <repo> |"
+            " patch-deps <DEPS-in> <DEPS-out>}"
         )
 
 

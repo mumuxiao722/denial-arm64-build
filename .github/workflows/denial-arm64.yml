@@ -88,12 +88,7 @@ jobs:
         run: |
           cd denial
           git apply "$GITHUB_WORKSPACE/patches/denial-arm64.diff"
-          python3 "$GITHUB_WORKSPACE/patches/arm64-prep.py" seed-prebuilt .
-          # package-denial-apk pins the x86-64 minirootfs by architecture and
-          # by digest, and verifies the download with sha256sum --strict, so
-          # both have to move together.
-          python3 "$GITHUB_WORKSPACE/patches/arm64-prep.py" patch-alpine \
-            tools/package-denial-apk
+          python3 "$GITHUB_WORKSPACE/patches/arm64-prep.py" prep-checkout .
 
       - name: "Denial doctor (host prerequisite check)"
         run: ./tools/denial-pc doctor || true

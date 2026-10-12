@@ -34,13 +34,14 @@ engine cache on its own. Nothing else needs editing.
 git clone --branch v0.5.0 https://github.com/denialwm/denial.git denial
 cd denial
 git apply /path/to/denial-arm64-builder/patches/denial-arm64.diff
-python3 /path/to/denial-arm64-builder/patches/arm64-prep.py seed-prebuilt .
+python3 /path/to/denial-arm64-builder/patches/arm64-prep.py prep-checkout .
 ```
 
 Keep this repository's `patches/` directory alongside the Denial checkout.
-`arm64-prep.py seed-prebuilt` creates the ARM64 prebuilt metadata directories
-Denial checks against; the patched build system calls the same file with
-`patch-deps` to rewrite the `DEPS` that `gclient sync` fetches.
+`arm64-prep.py prep-checkout` creates the ARM64 prebuilt metadata directories
+Denial checks against, and retargets the Alpine minirootfs to aarch64; the
+patched build system calls the same file with `patch-deps` to rewrite the
+`DEPS` that `gclient sync` fetches.
 
 The diff carries the whole change set against `v0.5.0`, so what it does is
 readable with `git diff` afterwards.
