@@ -402,7 +402,7 @@ index 68e27ae..84ff09b 100755
  esac
 +# DENIAL_ARM64_PATCHED
 diff --git a/tools/package-denial-arch b/tools/package-denial-arch
-index 3aa8f5d..784f322 100755
+index 3aa8f5d..4b9651f 100755
 --- a/tools/package-denial-arch
 +++ b/tools/package-denial-arch
 @@ -8,6 +8,13 @@ CACHE_ROOT="${XDG_CACHE_HOME:-${HOME:?HOME is required}/.cache}"
@@ -455,7 +455,22 @@ index 3aa8f5d..784f322 100755
  )"
  expected_engine_package_version="1:${package_version}-${PACKAGE_RELEASE}"
  
-@@ -297,11 +327,15 @@ validate_plugin_manager_package() (
+@@ -95,7 +125,13 @@ validate_engine_package() {
+       | sha256sum \
+       | cut -d' ' -f1
+   )"
+-  [[ "$packaged_engine_sha256" == "$expected_engine_sha256" ]] \
++  # An empty expected digest means no baseline was pinned: the ARM64 engine is
++  # built in this run rather than restored from a locked artifact, so there is
++  # nothing to compare it against. denial-pc and denial-flutter-engine both
++  # treat the empty file that way; this comparison did not, and failed every
++  # time against a digest that was never recorded.
++  [[ -z "$expected_engine_sha256" \
++     || "$packaged_engine_sha256" == "$expected_engine_sha256" ]] \
+     || {
+       printf 'package-denial-arch: engine package contains SHA-256 %s, expected %s\n' \
+         "$packaged_engine_sha256" "$expected_engine_sha256" >&2
+@@ -297,11 +333,15 @@ validate_plugin_manager_package() (
  )
  
  if [[ ! -f "$engine_package" || "$REBUILD_ENGINE_PACKAGE" == 1 ]]; then
@@ -473,7 +488,7 @@ index 3aa8f5d..784f322 100755
      --noconfirm
    validate_engine_package "$engine_package"
  else
-@@ -312,24 +346,24 @@ fi
+@@ -312,24 +352,24 @@ fi
  # The exact engine dependency is the package built immediately above, not a
  # package installed into the developer's live Pacman root. Validate both
  # package metadata records after the build and install them together in Stage 1.
@@ -504,7 +519,7 @@ index 3aa8f5d..784f322 100755
  )"
  validate_denial_package "$denial_package"
  validate_plugin_manager_package "$plugin_manager_package"
-@@ -338,3 +372,4 @@ printf '\nArch packages ready:\n'
+@@ -338,3 +378,4 @@ printf '\nArch packages ready:\n'
  printf '%s\n' "$engine_package"
  printf '%s\n' "$denial_package"
  printf '%s\n' "$plugin_manager_package"

@@ -154,10 +154,13 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             makepkg pacman-package-manager libarchive-tools gawk
           # pacman-package-manager creates /var/lib/pacman but not its local
-          # database, and libalpm refuses to initialize without one. It does
-          # not stop the build, but it prints "failed to initialize alpm
-          # library" on every makepkg invocation, which reads like a failure.
+          # database, and libalpm refuses to initialize without a valid one. It
+          # does not stop the build, but it prints failed to initialize alpm
+          # library on every makepkg invocation. mkdir alone is not enough:
+          # an empty directory is reported as database is incorrect version,
+          # so the database is created and then upgraded into shape.
           sudo mkdir -p /var/lib/pacman/local
+          sudo pacman-db-upgrade
           # || exit $? so a failure inside is this step's failure. bash -x
           # writes the trace to stderr and without this the step reports
           # success whatever denial-pc returned.
