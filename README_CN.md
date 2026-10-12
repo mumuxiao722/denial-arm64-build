@@ -44,9 +44,48 @@ minirootfs 换成 aarch64；打过补丁的构建系统会用同一个文件、�
 ## 构建
 
 Fork 本仓库，在 Actions 页面运行工作流。它在 ARM64 runner 上构建，并把安装包作为工作流
-产物上传；勾选 `publish_release` 则改为附到一个 GitHub release 上。
+产物上传，保留七天；勾选 `publish_release` 则改为附到一个 GitHub release 上。
+这些产物是构建输出，不构成软件源。
 
-合成器和 Flutter 引擎作为独立的包发布，因此安装合成器不会顺带拉入引擎。
+## 安装
+
+合成器和 Flutter 引擎作为独立的包发布，但两者并不互相独立：下面每个发行版里，
+合成器都依赖引擎，装它就会把引擎一起拉进来。两个包一起给，让包管理器自己解析即可。
+
+| 发行版 | 合成器 | 引擎 | 插件管理 |
+|---|---|---|---|
+| Debian / Ubuntu | `denial` | `denial-flutter-engine` | `denial-plugin-manager`，可选 |
+| Fedora / openSUSE | `denial` | `denial-flutter-engine` | `denial-plugin-manager`，可选 |
+| Arch | `denial` | `denial-flutter-engine` | `denial-plugin-manager`，可选 |
+| Alpine | `denial` | `denial-flutter-engine` | `denial-plugin-manager`，可选 |
+
+按上游所述，`denial-plugin-manager` 是可选软件包，用于安装 Denial 插件。
+
+```sh
+# Arch。引擎包名里 makepkg 原本用冒号分隔 epoch，产物不允许含冒号，故为 +。
+# pacman 从包内部读版本，文件名不影响安装。
+sudo pacman -U denial-flutter-engine-*.pkg.tar.gz denial-*.pkg.tar.gz
+sudo pacman -U denial-plugin-manager-*.pkg.tar.gz                  # 可选
+
+# Fedora
+sudo dnf install ./denial-flutter-engine-*.rpm ./denial-*.rpm
+sudo dnf install ./denial-plugin-manager-*.rpm                    # 可选
+
+# openSUSE
+sudo zypper install ./denial-flutter-engine-*.rpm ./denial-*.rpm
+sudo zypper install ./denial-plugin-manager-*.rpm                 # 可选
+
+# Debian / Ubuntu
+sudo apt install ./denial-flutter-engine-*.deb ./denial-*.deb
+sudo apt install ./denial-plugin-manager-*.deb                    # 可选
+
+# Alpine
+sudo apk add --allow-untrusted ./*.apk
+sudo apk add --allow-untrusted ./denial-plugin-manager-*.apk     # 可选
+```
+
+安装会写入 `/usr/share/wayland-sessions/denial.desktop`，因此 Denial 会出现在你当前
+使用的显示管理器的会话选择器里。
 
 ## 许可证
 

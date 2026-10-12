@@ -165,6 +165,19 @@ jobs:
           # writes the trace to stderr and without this the step reports
           # success whatever denial-pc returned.
           bash -x ./tools/denial-pc arch-package 2>&1 || exit $?
+          # actions/upload-artifact rejects ":<>|*\r\n" in an artifact path,
+          # because someone downloading it may be on NTFS, which cannot
+          # represent them. The runner here is ext4 and has no such problem,
+          # but the upload does. makepkg names a package with an epoch as
+          # name-epoch:pkgver-..., so only the engine package carries a colon.
+          # Rename rather than drop the epoch: pacman reads the version and
+          # architecture from .PKGINFO inside the package, not from the file
+          # name, and the epoch has to stay in that metadata for its
+          # downgrade protection. The separator is only a separator.
+          for p in "${{ github.workspace }}"/.denial-cache/pc-build/packages/*.pkg.tar.gz; do
+            [ -e "$p" ] || continue
+            case "$p" in *:*) mv -- "$p" "${p//:/+}" ;; esac
+          done
         working-directory: denial
         env:
           DENIAL_PC_MAKEPKG_ROOT: ${{ github.workspace }}/.denial-cache/pc-build/makepkg
@@ -197,8 +210,12 @@ jobs:
           # map: Permission denied". That is a policy bit, not a missing
           # kernel feature, so turning it off is enough. See Ubuntu bug
           # 2162114.
+          #
+          # No separate bwrap probe here: run_alpine() already runs bwrap with
+          # --bind and --dev, so it exercises the same path. A probe without a
+          # bind builds an empty root and then fails on execvp, which says
+          # nothing about the packaging.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          bwrap --unshare-user --uid 0 --gid 0 true
           ./tools/denial-pc alpine-package
         working-directory: denial
         # Allowed to fail so an unproven packaging path cannot block the RPM
