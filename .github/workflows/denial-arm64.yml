@@ -76,8 +76,8 @@ jobs:
             libinput-dev libudev-dev libxkbcommon-dev libseat-dev \
             libglib2.0-dev libgtk-3-dev fontconfig \
             libpolkit-agent-1-dev \
-            rpm rpm2cpio libarchive-tools \
-            jq
+            rpm rpm2cpio \
+            jq bubblewrap
 
       - name: "Add Rust toolchain"
         run: |
@@ -131,11 +131,9 @@ jobs:
       # and each upload only reports missing files as a warning -- a target
       # that failed for its own reason should not double up as an upload error.
       #
-      # Arch packages on the runner with makepkg from arch-install-scripts, the
-      # package the Arch install medium bootstraps with. Ubuntu's own
-      # pacman-package-manager ships makepkg with no pacman database behind
-      # it, which is the likeliest reason this route aborted before printing
-      # anything.
+      # Arch packages on the runner. package-denial-arch needs bsdtar, find,
+      # makepkg, mktemp and rm. makepkg and bsdtar come from pacman itself,
+      # not from arch-install-scripts, which is only the bootstrap scripts.
       #
       # A container was the other option and cannot work: Arch publishes no
       # ARM64 image, and its four repositories come from one pipeline over one
@@ -143,13 +141,21 @@ jobs:
       - name: "Package (Arch)"
         id: package-arch
         run: |
-          # makepkg dies with exit 138 and prints only its generic error.
-          # bash -x names the line and the command bash was waiting on when
-          # the signal arrived. This makepkg has no --debug option.
           set -o pipefail
-          sudo apt-get install -y --no-install-recommends arch-install-scripts
+          sudo apt-get install -y --no-install-recommends \
+            pacman libarchive-tools gawk
+          # Check each command before the packaging run, so a missing one is
+          # reported by name instead of as a failure somewhere downstream.
+          for cmd in bsdtar find makepkg mktemp rm; do
+            command -v "$cmd" >/dev/null || { echo "missing: $cmd"; exit 1; }
+          done
+          echo "makepkg: $(makepkg --version 2>&1 | head -1)"
+          echo "libalock: $(pacman --version 2>&1 | head -1)"
           PS4='+ ${BASH_SOURCE##*/}:${LINENO}: '
-          bash -x ./tools/denial-pc arch-package 2>&1
+          # || exit $? so a failure inside is this step's failure. bash -x
+          # writes the trace to stderr and without this the step reports
+          # success whatever denial-pc returned.
+          bash -x ./tools/denial-pc arch-package 2>&1 || exit $?
         working-directory: denial
         env:
           DENIAL_PC_MAKEPKG_ROOT: ${{ github.workspace }}/.denial-cache/pc-build/makepkg
@@ -173,7 +179,6 @@ jobs:
         working-directory: denial
         # Allowed to fail so an unproven packaging path cannot block the RPM
         # and deb targets.
-        continue-on-error: true
 
       - name: "Upload Denial APK"
         if: ${{ always() && steps.package-alpine.outcome == 'success' }}
