@@ -132,8 +132,9 @@ jobs:
       # that failed for its own reason should not double up as an upload error.
       #
       # Arch packages on the runner. package-denial-arch needs bsdtar, find,
-      # makepkg, mktemp and rm. makepkg and bsdtar come from pacman itself,
-      # not from arch-install-scripts, which is only the bootstrap scripts.
+      # makepkg, mktemp and rm. Ubuntu noble packages makepkg and libalpm for
+      # arm64 separately; arch-install-scripts is only the bootstrap scripts
+      # and carries no makepkg at all.
       #
       # A container was the other option and cannot work: Arch publishes no
       # ARM64 image, and its four repositories come from one pipeline over one
@@ -142,15 +143,23 @@ jobs:
         id: package-arch
         run: |
           set -o pipefail
+          # makepkg and pacman-package-manager are two debs from one source
+          # package, and makepkg alone is not enough: makepkg.sh resolves
+          # pacman by name at startup and kills itself with SIGUSR1 when that
+          # lookup fails, which surfaces as exit 138. --no-install-recommends
+          # suppresses pacman-package-manager's Recommends on makepkg, so both
+          # are named explicitly. The deb named pacman is the arcade game and
+          # installs under /usr/games, off PATH.
           sudo apt-get install -y --no-install-recommends \
-            pacman libarchive-tools gawk
+            makepkg pacman-package-manager libarchive-tools gawk
           # Check each command before the packaging run, so a missing one is
           # reported by name instead of as a failure somewhere downstream.
-          for cmd in bsdtar find makepkg mktemp rm; do
+          for cmd in bsdtar find makepkg pacman mktemp rm; do
             command -v "$cmd" >/dev/null || { echo "missing: $cmd"; exit 1; }
           done
-          echo "makepkg: $(makepkg --version 2>&1 | head -1)"
-          echo "libalock: $(pacman --version 2>&1 | head -1)"
+          # --version returns before the pacman lookup, so a green --version
+          # proves nothing. --printsrcinfo runs after it.
+          echo "makepkg: $(makepkg --printsrcinfo 2>&1 | head -1)"
           PS4='+ ${BASH_SOURCE##*/}:${LINENO}: '
           # || exit $? so a failure inside is this step's failure. bash -x
           # writes the trace to stderr and without this the step reports
@@ -159,7 +168,6 @@ jobs:
         working-directory: denial
         env:
           DENIAL_PC_MAKEPKG_ROOT: ${{ github.workspace }}/.denial-cache/pc-build/makepkg
-        continue-on-error: true
 
       - name: "Upload Denial Arch package"
         if: ${{ always() && steps.package-arch.outcome == 'success' }}
@@ -175,6 +183,10 @@ jobs:
       # it needs with it.
       - name: "Package (Alpine APK)"
         id: package-alpine
+        # Each target is independent. Without always() one failure skips
+        # every step after it, so a single broken distro costs the run all
+        # four of the others that were about to succeed.
+        if: ${{ always() }}
         run: ./tools/denial-pc alpine-package
         working-directory: denial
         # Allowed to fail so an unproven packaging path cannot block the RPM
@@ -191,6 +203,7 @@ jobs:
 
       - name: "Package (Fedora RPM)"
         id: package-fedora
+        if: ${{ always() }}
         run: ./tools/denial-pc fedora-package
         working-directory: denial
 
@@ -214,6 +227,7 @@ jobs:
 
       - name: "Package (openSUSE RPM)"
         id: package-opensuse
+        if: ${{ always() }}
         run: ./tools/denial-pc opensuse-package
         working-directory: denial
 
@@ -237,6 +251,7 @@ jobs:
 
       - name: "Package (Debian/Ubuntu deb)"
         id: package-deb
+        if: ${{ always() }}
         run: ./tools/denial-pc debian-package
         working-directory: denial
 
