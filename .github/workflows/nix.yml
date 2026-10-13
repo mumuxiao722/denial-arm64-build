@@ -1,4 +1,4 @@
-name: Nix
+name: Nix Flake Check
 
 on:
   workflow_dispatch:
@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   check:
-    name: Check
+    name: Flake check
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -34,8 +34,6 @@ jobs:
           extra_nix_config: |
             extra-substituters = https://denial.cachix.org
             extra-trusted-public-keys = denial.cachix.org-1:wd8YTnvPmugFrtdMJWtR1XdVknR3/g2nmBJkT+vAruo=
-
-      - uses: DeterminateSystems/magic-nix-cache-action@v9
 
       - name: flake check
         # checks.nixos-toplevel builds config.system.build.toplevel, which is
@@ -56,7 +54,7 @@ jobs:
           echo "aarch64-linux refused as expected"
 
   lock:
-    name: Update lock
+    name: Update lock file
     if: inputs.update_lock
     runs-on: ubuntu-24.04
     steps:

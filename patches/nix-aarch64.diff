@@ -402,10 +402,10 @@ index 80b10a4..82e1c22 100644
      final.lib.optionalAttrs (flutterNixpkgs != null) { inherit flutterNixpkgs; }
    );
 diff --git a/nix/package.nix b/nix/package.nix
-index fd5d665..58881ad 100644
+index fd5d665..10c0289 100644
 --- a/nix/package.nix
 +++ b/nix/package.nix
-@@ -26,11 +26,26 @@
+@@ -26,11 +26,28 @@
  let
    sourceFor =
      roots:
@@ -431,12 +431,14 @@ index fd5d665..58881ad 100644
 +    in
 +    lib.cleanSourceWith {
 +      src = root;
-+      name = "denial-source";
++      # "source" is what toSource uses and what every sourceRoot in this
++      # directory assumes -- native-app.nix unpacks into "source/native_app".
++      name = "source";
 +      filter = keeps;
      };
    compositor = callPackage ./compositor.nix {
      src = sourceFor [
-@@ -402,6 +417,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
+@@ -402,6 +419,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
        ofl
      ];
      mainProgram = "denial-session";

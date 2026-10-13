@@ -44,7 +44,9 @@ let
     in
     lib.cleanSourceWith {
       src = root;
-      name = "denial-source";
+      # "source" is what toSource uses and what every sourceRoot in this
+      # directory assumes -- native-app.nix unpacks into "source/native_app".
+      name = "source";
       filter = keeps;
     };
   compositor = callPackage ./compositor.nix {
