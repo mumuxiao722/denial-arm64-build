@@ -1,0 +1,113 @@
+name: Nix
+
+on:
+  workflow_dispatch:
+    inputs:
+      update_lock:
+        description: Lock the ref below, upload the resulting flake.lock
+        type: boolean
+        default: false
+      denial_ref:
+        description: Upstream tag or branch, used only when update_lock is set
+        type: string
+        default: v0.5.0
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          # flake.nix declares the same two values in nixConfig, but that is
+          # only applied to a flake under --accept-flake-config, so the runner
+          # needs them before the first evaluation happens.
+          extra_nix_config: |
+            extra-substituters = https://denial.cachix.org
+            extra-trusted-public-keys = denial.cachix.org-1:wd8YTnvPmugFrtdMJWtR1XdVknR3/g2nmBJkT+vAruo=
+
+      - uses: DeterminateSystems/magic-nix-cache-action@v9
+
+      - name: Show what the pin resolved to
+        run: |
+          nix flake metadata --json --accept-flake-config \
+            | jq --arg ref "$DENIAL_REF" '{ref: $ref, denial: .locks.nodes.denial.locked}'
+
+        env:
+          DENIAL_REF: ${{ vars.DENIAL_REF }}
+
+      # The package pipeline and this flake pin the same upstream release from
+      # two places that nothing else connects: DENIAL_REF is a repository
+      # variable read by denial-arm64.yml, flake.nix is a commit literal. A tag
+      # move that reaches one and not the other would build RPMs and evaluate a
+      # NixOS module against different Denial versions.
+      - name: The Nix pin matches DENIAL_REF
+        run: |
+          if [ -z "$DENIAL_REF" ]; then
+            echo "::error::the DENIAL_REF repository variable is empty"
+            exit 1
+          fi
+          locked="$(nix flake metadata --json --accept-flake-config \
+            | jq --raw-output '.locks.nodes.denial.locked.rev')"
+          expected="$(git ls-remote https://github.com/denialwm/denial \
+            "refs/tags/${DENIAL_REF}^{}" | cut --field 1)"
+          echo "DENIAL_REF $DENIAL_REF -> ${expected:-<no such tag>}"
+          echo "flake.lock denial    -> $locked"
+          if [ -z "$expected" ] || [ "$locked" != "$expected" ]; then
+            echo "::error::flake.nix pins $locked but DENIAL_REF is $DENIAL_REF"
+            exit 1
+          fi
+
+      - name: flake check
+        # checks.nixos-toplevel builds config.system.build.toplevel, which is
+        # the Rust compositor plus the Flutter applications. The engine itself
+        # comes from denial.cachix.org.
+        run: nix flake check --accept-flake-config --show-trace
+
+      # AArch64 is refused on purpose until the engine is ported. If it ever
+      # starts evaluating, the port landed and this guard is now wrong.
+      - name: AArch64 still refuses, with the reason
+        run: |
+          if nix eval --accept-flake-config .#packages.aarch64-linux >evaluated.txt 2>error.txt; then
+            echo "::error::aarch64-linux evaluated; the Nix port has landed and this check should go"
+            exit 1
+          fi
+          grep --quiet 'does not provide Nix packages for aarch64-linux' error.txt \
+            || { cat error.txt; exit 1; }
+          echo "aarch64-linux refused as expected"
+
+  lock:
+    name: Update lock
+    if: inputs.update_lock
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: cachix/install-nix-action@v31
+
+      # flake.nix holds a commit literal so the pin is reviewable in one place.
+      # --override-input resolves a tag or branch without editing it, and the
+      # artifact is the candidate flake.lock to commit alongside the bump.
+      - name: Lock the requested ref
+        run: |
+          nix flake lock \
+            --override-input denial "github:denialwm/denial/${{ inputs.denial_ref }}" \
+            --accept-flake-config
+          nix flake metadata --json --accept-flake-config \
+            | jq '.locks.nodes.denial'
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: flake-lock-${{ inputs.denial_ref }}
+          path: flake.lock
+          if-no-files-found: error
+          retention-days: 30
