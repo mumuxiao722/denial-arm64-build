@@ -96,34 +96,38 @@
           # question `nixos-rebuild switch` actually asks: does
           # config.system.build.toplevel come out of the store.
           #
-          # Referencing the store path inside a runCommand makes it a build
-          # input, so building this check builds the whole system closure. The
-          # engine comes from denial.cachix.org, so what is left to compile is
-          # the Rust compositor and the Flutter applications.
-          nixos-toplevel = let
-            # The same minimal configuration upstream's own module check
-            # evaluates (nix/tests/module.nix:28-35), so both checks describe
-            # one system.
-            evaluated = denial.inputs.nixpkgs.lib.nixosSystem {
-              inherit system;
-              modules = [
-                self.nixosModules.denial
-                {
-                  boot.loader.grub.enable = false;
-                  fileSystems."/" = {
-                    device = "none";
-                    fsType = "tmpfs";
-                  };
-                  programs.denial.enable = true;
-                  system.stateVersion = "26.05";
-                }
-              ];
-            };
-          in
-          (mkPkgs denial.inputs.nixpkgs).runCommand "denial-nixos-toplevel" { } ''
-            ${evaluated.config.system.build.toplevel}
-            touch $out
-          '';
+          # Referencing the store path as a link target makes it a build input,
+          # so building this check builds the whole system closure. A bare
+          # interpolation would leave the path alone on the first line of the
+          # script, and the shell would try to execute it.
+          #
+          # The engine comes from denial.cachix.org, so what is left to compile
+          # is the Rust compositor and the Flutter applications.
+          nixos-toplevel =
+            let
+              # The same minimal configuration upstream's own module check
+              # evaluates (nix/tests/module.nix:28-35), so both checks describe
+              # one system.
+              evaluated = denial.inputs.nixpkgs.lib.nixosSystem {
+                inherit system;
+                modules = [
+                  self.nixosModules.denial
+                  {
+                    boot.loader.grub.enable = false;
+                    fileSystems."/" = {
+                      device = "none";
+                      fsType = "tmpfs";
+                    };
+                    programs.denial.enable = true;
+                    system.stateVersion = "26.05";
+                  }
+                ];
+              };
+            in
+            (mkPkgs denial.inputs.nixpkgs).runCommand "denial-nixos-toplevel" { } ''
+              mkdir -p $out
+              ln -s ${evaluated.config.system.build.toplevel} $out/system
+            '';
 
           # Re-exported rather than rebuilt: this one reads the pinned commit's
           # own lock files, which is what moves when the pin moves.
