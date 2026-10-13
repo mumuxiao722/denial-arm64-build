@@ -123,7 +123,7 @@
           nixos-toplevel = let
             evaluated = hostModule denial.inputs.nixpkgs;
           in
-          mkPkgs denial.inputs.nixpkgs.runCommand "denial-nixos-toplevel" { } ''
+          (mkPkgs denial.inputs.nixpkgs).runCommand "denial-nixos-toplevel" { } ''
             ${evaluated.config.system.build.toplevel}
             touch $out
           '';
