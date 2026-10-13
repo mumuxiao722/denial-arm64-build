@@ -72,12 +72,15 @@
           overlays = [ localOverlay ];
         };
 
-      # A system that exists to be built and inspected, never booted.
-      # system.build.installRoot is the tree nixos-install lays down, so what it
-      # contains is what a nixos-rebuild switch would be switching to. No
-      # bootloader and no display manager: a display manager would try to start
-      # denial, and whether the compositor runs is the compositor's business,
-      # not this repository's. Nothing here touches the source tree.
+      # A system that exists to be built and inspected, never booted and never
+      # installed. system.build.toplevel is what nixos-rebuild builds and what
+      # its activation script switches to. There is no system.build.installRoot
+      # in this Nixpkgs, so toplevel is the closest thing to the tree
+      # nixos-install lays down. No bootloader and no display manager: a display
+      # manager would try to start denial, and whether the compositor runs is
+      # the compositor's business, not this repository's. Nothing here touches
+      # the source tree. This is not a product -- it is what Nix Install Check
+      # looks inside.
       trialSystem =
         system:
         nixpkgs.lib.nixosSystem {
@@ -133,8 +136,11 @@
           denial-flutter-framework-source = maintenance.fetchedFlutter;
           denial-flutter-dart = maintenance.dart;
 
-          # The image workflow builds this and looks inside.
-          trial-rootfs = (trialSystem system).config.system.build.installRoot;
+          # The install check builds this and looks inside. The binaries and the
+          # engine are checked on `denial` instead: inside a toplevel /bin and
+          # /lib are symlinks into the store, not a merged tree, so
+          # lib/denial/flutter is not there to look at.
+          trial-rootfs = (trialSystem system).config.system.build.toplevel;
         }
       );
 

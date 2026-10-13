@@ -1,0 +1,105 @@
+name: Nix Switch Check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nix-switch-check-${{ github.ref }}
+  cancel-in-progress: false
+
+# Deliberately not a check. denial.cachix.org carries only the x86_64 engine, so
+# an AArch64 build compiles the Flutter engine from source and runs for hours.
+# Nothing here is automatic: it runs when someone wants to know whether the
+# system still comes out of the store, not on every push.
+#
+# Named for the question it answers: can a NixOS system with this module in it be
+# built and switched to. What it actually does is build system.build.toplevel
+# and look at what came out, because running switch-to-configuration needs a
+# running NixOS to run it on and the ARM64 runner is Ubuntu.
+#
+# The output is not a deliverable. Nothing installs it, nobody ships it, and it
+# is deliberately missing a bootloader and a display manager -- a display manager
+# would try to start denial, and whether the compositor runs is upstream's
+# business, since nothing here touches its source.
+jobs:
+  build:
+    name: Build a minimal system
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-substituters = https://denial.cachix.org
+            extra-trusted-public-keys = denial.cachix.org-1:wd8YTnvPmugFrtdMJWtR1XdVknR3/g2nmBJkT+vAruo=
+
+      - name: Build the package
+        run: nix build .#denial -o package --accept-flake-config --show-trace
+
+      - name: Build a minimal system around it
+        run: nix build .#trial-rootfs -o result --accept-flake-config --show-trace
+
+      # The compositor, its engine and the session entry are what the module is
+      # for. Checked on the package rather than the system because inside a
+      # toplevel /bin and /lib are symlinks into the store, not a merged tree.
+      - name: The compositor and its engine are in the package
+        run: |
+          set -euo pipefail
+          for path in \
+            bin/deniald \
+            bin/denialctl \
+            bin/denial-portal \
+            bin/denial-session \
+            bin/denial-settings \
+            lib/denial/flutter/lib/libflutter_engine.so \
+            lib/denial/flutter/lib/libapp.so \
+            lib/denial/flutter/data/icudtl.dat; do
+            if [ ! -e "package/$path" ]; then
+              echo "::error::$path is missing from the package"
+              exit 1
+            fi
+            echo "  ok  $path"
+          done
+
+      - name: The engine matches the architecture it was built for
+        run: |
+          set -euo pipefail
+          # A store path holding the x86_64 engine would pass every existence
+          # check above. Its ELF header says otherwise.
+          file package/lib/denial/flutter/lib/libflutter_engine.so
+          readelf -h package/lib/denial/flutter/lib/libflutter_engine.so \
+            | grep --quiet 'AArch64'
+
+      # This is the half that is actually about the module: the session entry a
+      # display manager reads, the two configuration files the launcher treats
+      # as declarative input, and the portal the module wires up.
+      - name: The module put its files in /etc
+        run: |
+          set -euo pipefail
+          for path in \
+            etc/denial/session.conf \
+            etc/denial/outputs.conf \
+            etc/xdg/xdg-desktop-portal-wlr/Denial; do
+            if [ ! -e "result/$path" ]; then
+              echo "::error::$path is missing from the system"
+              exit 1
+            fi
+            echo "  ok  $path"
+          done
+
+      - name: List what was installed
+        run: |
+          find result/etc -maxdepth 3 | sort | head -40
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: install-check-listing
+          path: |
+            result/etc/denial
+            package/lib/denial/flutter/lib
+          if-no-files-found: error
+          retention-days: 7
