@@ -74,6 +74,19 @@ jobs:
       - name: "Install Build Tools"
         run: |
           sudo apt-get update
+          # libarchive-tools is here rather than beside any one target because
+          # package-denial-rpm, package-denial-apk and package-denial-arch each
+          # declare bsdtar in their required_command list, and whichever of
+          # those ran before the step that installed it failed with
+          # "bsdtar is required". It is not tar: an APK is several gzip streams
+          # concatenated, and GNU tar stops after the first one, so it cannot
+          # see the .PKGINFO or the signature that follows.
+          #
+          # Comments belong above the command, never inside the continuation
+          # list below. A YAML block scalar keeps "# ..." as shell text, where
+          # it starts a comment, so the backslash then joins the comment
+          # instead of the package name and the last package is run as a
+          # command of its own.
           sudo apt-get install -y --no-install-recommends \
             git curl tar xz-utils zip unzip \
             build-essential cmake ninja-build pkg-config \
@@ -85,10 +98,6 @@ jobs:
             libglib2.0-dev libgtk-3-dev fontconfig \
             libpolkit-agent-1-dev \
             jq \
-            # bsdtar for package-denial-rpm, package-denial-apk and
-            # package-denial-arch. Not tar: an APK is several gzip streams
-            # concatenated, and GNU tar stops after the first one, so it
-            # cannot see the .PKGINFO or the signature that follows.
             libarchive-tools
 
       - name: "Add Rust toolchain"
@@ -147,101 +156,13 @@ jobs:
       # Alpine packages on the runner. Run d2b7abe did this without abuild on
       # the host and the step passed, so denial-pc alpine-package brings what
       # it needs with it.
-      - name: "Package (Alpine APK)"
-        id: package-alpine
-        # Each target is independent, so one failure must not skip the
-        # others. But they all consume what Stage runtime staged, so
-        # running them without a payload only manufactures false failures.
-        if: ${{ always() && steps.stage-runtime.conclusion == 'success' }}
-        run: |
-          # package-denial-apk runs bwrap --unshare-user twice, which has to
-          # write /proc/self/uid_map. Ubuntu 24.04 defaults
-          # kernel.apparmor_restrict_unprivileged_userns to 1, and AppArmor
-          # denies exactly that write, so bwrap exits with "setting up uid
-          # map: Permission denied". That is a policy bit, not a missing
-          # kernel feature, so turning it off is enough. See Ubuntu bug
-          # 2162114.
-          #
-          # No separate bwrap probe here: run_alpine() already runs bwrap with
-          # --bind and --dev, so it exercises the same path. A probe without a
-          # bind builds an empty root and then fails on execvp, which says
-          # nothing about the packaging.
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          # bwrap is the one tool only this target needs, so it is installed
-          # here rather than in the shared build step.
-          sudo apt-get install -y --no-install-recommends bubblewrap
-          ./tools/denial-pc alpine-package
-        working-directory: denial
-        # Allowed to fail so an unproven packaging path cannot block the RPM
-        # and deb targets.
-
-      - name: "Upload Denial APK"
-        if: ${{ always() && steps.package-alpine.outcome == 'success' }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: denial-apk-arm64
-          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/*.apk
-          retention-days: 7
-          if-no-files-found: error
-
-      # rpm and rpmbuild are wanted by both RPM targets and by neither of the
-      # other three.
-      - name: "Install RPM tools"
-        run: sudo apt-get install -y --no-install-recommends rpm
-
-      - name: "Package (Fedora RPM)"
-        id: package-fedora
-        if: ${{ always() && steps.stage-runtime.conclusion == 'success' }}
-        run: ./tools/denial-pc fedora-package
-        working-directory: denial
-
-      - name: "Upload Denial RPM (Fedora)"
-        if: ${{ always() && steps.package-fedora.outcome == 'success' }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: denial-rpm-fedora-arm64
-          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/denial-[0-9]*.rpm
-          retention-days: 7
-          if-no-files-found: error
-
-      - name: "Upload Denial Flutter Engine RPM (Fedora)"
-        if: ${{ always() && steps.package-fedora.outcome == 'success' }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: denial-flutter-engine-rpm-fedora-arm64
-          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/denial-flutter-engine-*.rpm
-          retention-days: 7
-          if-no-files-found: error
-
-      - name: "Package (openSUSE RPM)"
-        id: package-opensuse
-        if: ${{ always() && steps.stage-runtime.conclusion == 'success' }}
-        run: ./tools/denial-pc opensuse-package
-        working-directory: denial
-
-      - name: "Upload Denial RPM (openSUSE)"
-        if: ${{ always() && steps.package-opensuse.outcome == 'success' }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: denial-rpm-opensuse-arm64
-          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/opensuse/denial-[0-9]*.rpm
-          retention-days: 7
-          if-no-files-found: error
-
-      - name: "Upload Denial Flutter Engine RPM (openSUSE)"
-        if: ${{ always() && steps.package-opensuse.outcome == 'success' }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: denial-flutter-engine-rpm-opensuse-arm64
-          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/opensuse/denial-flutter-engine-*.rpm
-          retention-days: 7
-          if-no-files-found: error
 
       - name: "Package (Debian/Ubuntu deb)"
         id: package-deb
         if: ${{ always() && steps.stage-runtime.conclusion == 'success' }}
         run: ./tools/denial-pc debian-package
         working-directory: denial
+
 
       - name: "Upload Denial deb"
         if: ${{ always() && steps.package-deb.outcome == 'success' }}
@@ -251,6 +172,15 @@ jobs:
           path: ${{ github.workspace }}/.denial-cache/pc-build/packages/*.deb
           retention-days: 7
           if-no-files-found: error
+
+      # Arch packages on the runner. package-denial-arch needs bsdtar, find,
+      # makepkg, mktemp and rm. Ubuntu noble packages makepkg and libalpm for
+      # arm64 separately; arch-install-scripts is only the bootstrap scripts
+      # and carries no makepkg at all.
+      #
+      # A container was the other option and cannot work: Arch publishes no
+      # ARM64 image, and its four repositories come from one pipeline over one
+      # set of rootfs archives, so there is no registry to switch to.
 
       # Arch packages on the runner. package-denial-arch needs bsdtar, find,
       # makepkg, mktemp and rm. Ubuntu noble packages makepkg and libalpm for
@@ -301,6 +231,7 @@ jobs:
         env:
           DENIAL_PC_MAKEPKG_ROOT: ${{ github.workspace }}/.denial-cache/pc-build/makepkg
 
+
       - name: "Upload Denial Arch package"
         if: ${{ always() && steps.package-arch.outcome == 'success' }}
         uses: actions/upload-artifact@v7
@@ -318,6 +249,7 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+
       - name: "Upload Denial Arch plugin manager"
         if: ${{ always() && steps.package-arch.outcome == 'success' }}
         uses: actions/upload-artifact@v7
@@ -327,6 +259,112 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+      - name: "Package (Fedora RPM)"
+        id: package-fedora
+        if: ${{ always() && steps.stage-runtime.conclusion == 'success' }}
+        run: |
+          # rpm and rpmbuild are wanted by both RPM targets and by neither of
+          # the other three. openSUSE runs next and inherits this install
+          # rather than repeating it.
+          sudo apt-get install -y --no-install-recommends rpm
+          ./tools/denial-pc fedora-package
+        working-directory: denial
+
+
+      - name: "Upload Denial RPM (Fedora)"
+        if: ${{ always() && steps.package-fedora.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: denial-rpm-fedora-arm64
+          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/denial-[0-9]*.rpm
+          retention-days: 7
+          if-no-files-found: error
+
+
+      - name: "Upload Denial Flutter Engine RPM (Fedora)"
+        if: ${{ always() && steps.package-fedora.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: denial-flutter-engine-rpm-fedora-arm64
+          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/denial-flutter-engine-*.rpm
+          retention-days: 7
+          if-no-files-found: error
+
+
+      - name: "Package (openSUSE RPM)"
+        id: package-opensuse
+        if: ${{ always() && steps.stage-runtime.conclusion == 'success' }}
+        run: ./tools/denial-pc opensuse-package
+        working-directory: denial
+
+
+      - name: "Upload Denial RPM (openSUSE)"
+        if: ${{ always() && steps.package-opensuse.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: denial-rpm-opensuse-arm64
+          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/opensuse/denial-[0-9]*.rpm
+          retention-days: 7
+          if-no-files-found: error
+
+
+      - name: "Upload Denial Flutter Engine RPM (openSUSE)"
+        if: ${{ always() && steps.package-opensuse.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: denial-flutter-engine-rpm-opensuse-arm64
+          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/opensuse/denial-flutter-engine-*.rpm
+          retention-days: 7
+          if-no-files-found: error
+
+      # Package and upload one distribution at a time. Each upload runs with
+      # always() so a later target failing cannot discard what already built,
+      # and each upload only reports missing files as a warning -- a target
+      # that failed for its own reason should not double up as an upload error.
+      #
+      # Alpine packages on the runner. Run d2b7abe did this without abuild on
+      # the host and the step passed, so denial-pc alpine-package brings what
+      # it needs with it.
+      - name: "Package (Alpine APK)"
+        id: package-alpine
+        # Each target is independent, so one failure must not skip the
+        # others. But they all consume what Stage runtime staged, so
+        # running them without a payload only manufactures false failures.
+        if: ${{ always() && steps.stage-runtime.conclusion == 'success' }}
+        run: |
+          # package-denial-apk runs bwrap --unshare-user twice, which has to
+          # write /proc/self/uid_map. Ubuntu 24.04 defaults
+          # kernel.apparmor_restrict_unprivileged_userns to 1, and AppArmor
+          # denies exactly that write, so bwrap exits with "setting up uid
+          # map: Permission denied". That is a policy bit, not a missing
+          # kernel feature, so turning it off is enough. See Ubuntu bug
+          # 2162114.
+          #
+          # No separate bwrap probe here: run_alpine() already runs bwrap with
+          # --bind and --dev, so it exercises the same path. A probe without a
+          # bind builds an empty root and then fails on execvp, which says
+          # nothing about the packaging.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          # bwrap is the one tool only this target needs, so it is installed
+          # here rather than in the shared build step.
+          sudo apt-get install -y --no-install-recommends bubblewrap
+          ./tools/denial-pc alpine-package
+        working-directory: denial
+        # Allowed to fail so an unproven packaging path cannot block the RPM
+        # and deb targets.
+
+
+      - name: "Upload Denial APK"
+        if: ${{ always() && steps.package-alpine.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: denial-apk-arm64
+          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/*.apk
+          retention-days: 7
+          if-no-files-found: error
+
+      # rpm and rpmbuild are wanted by both RPM targets and by neither of the
+      # other three.
   release:
     name: "Publish release"
     needs: build
