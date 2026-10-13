@@ -38,9 +38,21 @@ def pinned_ref() -> str:
 def upstream_nix(ref: str, dest: pathlib.Path) -> None:
     with tempfile.TemporaryDirectory() as work:
         checkout = pathlib.Path(work) / "denial"
+        # The default is a commit, and --branch only accepts refs, so the fetch
+        # is by object id. GitHub allows that for public repositories.
+        subprocess.run(["git", "init", "--quiet", str(checkout)], check=True)
         subprocess.run(
-            ["git", "clone", "--quiet", "--depth", "1", "--branch", ref,
-             "https://github.com/denialwm/denial", str(checkout)],
+            ["git", "-C", str(checkout), "remote", "add", "origin",
+             "https://github.com/denialwm/denial"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(checkout), "fetch", "--quiet", "--depth", "1",
+             "origin", ref],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(checkout), "checkout", "--quiet", "FETCH_HEAD"],
             check=True,
         )
         source = checkout / "nix"
