@@ -67,6 +67,9 @@ jobs:
             exit 1
           fi
 
+        env:
+          DENIAL_REF: ${{ vars.DENIAL_REF }}
+
       - name: flake check
         # checks.nixos-toplevel builds config.system.build.toplevel, which is
         # the Rust compositor plus the Flutter applications. The engine itself
