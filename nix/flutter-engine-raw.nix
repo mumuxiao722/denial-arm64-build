@@ -3,6 +3,7 @@
   lib,
   denialSource,
   pkgs,
+  stdenv,
   runCommand,
   python3,
   patchelf,
@@ -53,6 +54,7 @@ runCommand "denial-flutter-engine-raw-${sourceEngine.version}"
     done
     cp ${sourceEngine.src}/src/flutter/shell/platform/embedder/embedder.h \
       $out/out/host_release/flutter_embedder.h
+    # Licence text, not architecture-specific; see flutter-engine.nix.
     cp ${denialSource}/prebuilt/flutter-engine/linux-x64-release/LICENSE.flutter} $out/licenses/LICENSE.flutter
     cp ${denialSource}/prebuilt/flutter-engine/linux-x64-release/LICENSE.third_party} $out/licenses/LICENSE.third_party
     chmod -R u+w $out
@@ -82,7 +84,7 @@ runCommand "denial-flutter-engine-raw-${sourceEngine.version}"
       --source-lock ${denialSource}/prebuilt/flutter-engine/SOURCE_LOCK.json} \
       --nix-lock ${./flutter-engine-lock.json} \
       --configuration ${sourceEngine.release}/denial-args.gn \
-      --platform x86_64-linux --minimum-glibc ${minimumGlibc} \
+      --platform ${stdenv.hostPlatform.system} --minimum-glibc ${minimumGlibc} \
       --minimum-compiler-runtime ${minimumCompilerRuntime} \
       --nixpkgs-version ${lib.escapeShellArg lib.version}
   ''

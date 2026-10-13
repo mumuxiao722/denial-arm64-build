@@ -20,11 +20,15 @@ let
       };
     };
   };
+  # Flutter names its Linux targets after the architecture, and the bundle
+  # directory below is derived from the same name.
   targetPlatform =
-    if stdenv.hostPlatform.system == "x86_64-linux" then
-      "linux-x64"
-    else
-      throw "Denial does not support ${stdenv.hostPlatform.system}";
+    {
+      x86_64-linux = "linux-x64";
+      aarch64-linux = "linux-arm64";
+    }
+    .${stdenv.hostPlatform.system}
+      or (throw "Denial does not support ${stdenv.hostPlatform.system}");
 in
 assert lib.assertMsg (pubspecLock.source_sha256 == sourceLockHash) ''
   dart_shell/pubspec.lock changed without regenerating nix/dart_shell-pubspec-lock.json;
@@ -50,7 +54,7 @@ denialFlutter.buildFlutterApplication {
       -dDartObfuscation=false \
       -dTrackWidgetCreation=true \
       -dTreeShakeIcons=true \
-      release_bundle_linux-x64_assets
+      release_bundle_${targetPlatform}_assets
     runHook postBuild
   '';
 

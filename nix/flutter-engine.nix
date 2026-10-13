@@ -21,6 +21,9 @@ let
   flutterVersion = "3.47.5";
   flutterRevision = sourceLock.flutter.revision;
   engineVersion = lib.removeSuffix "\n" (
+  # Upstream ships one prebuilt metadata directory and it is named for x86_64.
+  # What is read from it -- the engine revision -- does not vary by
+  # architecture, and the AArch64 engine is built from that same revision.
     builtins.readFile (denialSource + "/prebuilt/flutter-engine/linux-x64-release/ENGINE_REVISION")
   );
   dartVersion = nixLock.dart.version;

@@ -1,5 +1,14 @@
-{ lib, denialFlutter, nativeApp }:
+{ lib, denialFlutter, nativeApp, stdenv }:
 { name, app, src, pubspecLock, sourceLockHash, version, postInstall ? "" }:
+let
+  targetPlatform =
+    {
+      x86_64-linux = "linux-x64";
+      aarch64-linux = "linux-arm64";
+    }
+    .${stdenv.hostPlatform.system}
+      or (throw "Denial does not support ${stdenv.hostPlatform.system}");
+in
 assert lib.assertMsg (pubspecLock.source_sha256 == sourceLockHash)
   "${app}/pubspec.lock changed; run tools/denial-nix refresh-pub-locks";
 denialFlutter.buildFlutterApplication {
@@ -12,8 +21,8 @@ denialFlutter.buildFlutterApplication {
     runHook preBuild
     flutter assemble --local-engine host_release --suppress-analytics \
       --output=build/nix-assembly -dTargetFile=lib/main.dart -dBuildMode=release \
-      -dTargetPlatform=linux-x64 -dDartObfuscation=false \
-      -dTrackWidgetCreation=true -dTreeShakeIcons=true release_bundle_linux-x64_assets
+      -dTargetPlatform=${targetPlatform} -dDartObfuscation=false \
+      -dTrackWidgetCreation=true -dTreeShakeIcons=true release_bundle_${targetPlatform}_assets
     runHook postBuild
   '';
   installPhase = ''
