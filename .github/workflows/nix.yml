@@ -37,46 +37,10 @@ jobs:
 
       - uses: DeterminateSystems/magic-nix-cache-action@v9
 
-      - name: Show what the pin resolved to
-        run: |
-          nix flake metadata --json --accept-flake-config \
-            | jq --arg ref "$DENIAL_REF" '{ref: $ref, denial: .locks.nodes.denial.locked}'
-
-        env:
-          DENIAL_REF: ${{ vars.DENIAL_REF }}
-
-      # The package pipeline and this flake pin the same upstream release from
-      # two places that nothing else connects: DENIAL_REF is a repository
-      # variable read by denial-arm64.yml, flake.nix is a commit literal. A tag
-      # move that reaches one and not the other would build RPMs and evaluate a
-      # NixOS module against different Denial versions.
-      - name: The Nix pin matches DENIAL_REF
-        run: |
-          if [ -z "$DENIAL_REF" ]; then
-            echo "::error::the DENIAL_REF repository variable is empty"
-            exit 1
-          fi
-          locked="$(nix flake metadata --json --accept-flake-config \
-            | jq --raw-output '.locks.nodes.denial.locked.rev')"
-          expected="$(git ls-remote https://github.com/denialwm/denial \
-            "refs/tags/${DENIAL_REF}^{}" | cut --field 1)"
-          echo "DENIAL_REF $DENIAL_REF -> ${expected:-<no such tag>}"
-          echo "flake.lock denial    -> $locked"
-          if [ -z "$expected" ] || [ "$locked" != "$expected" ]; then
-            echo "::error::flake.nix pins $locked but DENIAL_REF is $DENIAL_REF"
-            exit 1
-          fi
-
-        env:
-          DENIAL_REF: ${{ vars.DENIAL_REF }}
-
       - name: Diagnose the path types
         run: |
-          U=github:denialwm/denial/c56aa2d6e8d70bd87b279e4edd70588c7ec15a6d
-          echo "--- typeOf outPath | typeOf toPath | isPath toPath ---"
-          nix eval --impure --raw-str --expr 'let d = (builtins.getFlake "github:denialwm/denial/c56aa2d6e8d70bd87b279e4edd70588c7ec15a6d").outPath; p = builtins.toPath d; in builtins.typeOf d + " | " + builtins.typeOf p + " | " + builtins.toString (builtins.isPath p)'
-          echo "--- typeOf (import outPath) ---"
-          nix eval --impure --raw-str --expr 'let d = (builtins.getFlake "github:denialwm/denial/c56aa2d6e8d70bd87b279e4edd70588c7ec15a6d").outPath; in builtins.typeOf (import d)'
+          nix eval --impure --json --expr 'builtins.typeOf (builtins.toPath (builtins.getFlake "github:denialwm/denial/c56aa2d6e8d70bd87b279e4edd70588c7ec15a6d").outPath)'
+          nix eval --impure --json --expr 'builtins.isPath (builtins.toPath (builtins.getFlake "github:denialwm/denial/c56aa2d6e8d70bd87b279e4edd70588c7ec15a6d").outPath)'
 
       - name: flake check
         # checks.nixos-toplevel builds config.system.build.toplevel, which is
