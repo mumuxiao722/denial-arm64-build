@@ -19,44 +19,65 @@ concurrency:
   group: nix-${{ github.ref }}
   cancel-in-progress: true
 
+# AArch64 only, and natively. The runner is the same architecture as the
+# packages this repository exists to produce, so nothing here cross-compiles.
+# The AArch64 engine has no binary cache -- denial.cachix.org carries only the
+# x86_64 one -- so a full build compiles the engine from source and runs for
+# hours. Evaluating and resolving fetches is the cheap half and is what most
+# changes can be caught by.
 jobs:
   check:
-    name: Flake check
-    runs-on: ubuntu-24.04
+    name: Flake check (aarch64)
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
 
       - uses: cachix/install-nix-action@v31
         with:
-          # flake.nix declares the same two values in nixConfig, but that is
-          # only applied to a flake under --accept-flake-config, so the runner
-          # needs them before the first evaluation happens.
+          # flake.nix declares these in nixConfig, but that is only applied to
+          # a flake under --accept-flake-config, so the runner needs them
+          # before the first evaluation happens.
           extra_nix_config: |
             extra-substituters = https://denial.cachix.org
             extra-trusted-public-keys = denial.cachix.org-1:wd8YTnvPmugFrtdMJWtR1XdVknR3/g2nmBJkT+vAruo=
 
-      - name: flake check
-        # checks.nixos-toplevel builds config.system.build.toplevel, which is
-        # the Rust compositor plus the Flutter applications. The engine itself
-        # comes from denial.cachix.org.
-        run: nix flake check --accept-flake-config --show-trace
+      - name: Evaluate every output
+        run: nix flake check --no-build --accept-flake-config --show-trace
 
-      # AArch64 is refused on purpose until the engine is ported. If it ever
-      # starts evaluating, the port landed and this guard is now wrong.
-      - name: AArch64 still refuses, with the reason
+      # nix/flutter-engine-lock.json carries placeholders for the two AArch64
+      # hashes, so these two builds are expected to fail at the fetch, not
+      # compile. Nix prints the real hash as `got:` and that is the whole point
+      # of the step: it turns the placeholders into values that can be
+      # committed. Same trick as upstream's tools/denial-nix refresh-engine-lock.
+      - name: Resolve the AArch64 hashes
         run: |
-          if nix eval --accept-flake-config .#packages.aarch64-linux >evaluated.txt 2>error.txt; then
-            echo "::error::aarch64-linux evaluated; the Nix port has landed and this check should go"
-            exit 1
-          fi
-          grep --quiet 'does not provide Nix packages for aarch64-linux' error.txt \
-            || { cat error.txt; exit 1; }
-          echo "aarch64-linux refused as expected"
+          set +e
+          for attr in denial-flutter-dart denial-flutter-engine-source; do
+            echo "=== $attr ==="
+            nix build ".#$attr" --no-link 2>&1 | tee "/tmp/$attr.log" | tail -5
+          done
+          echo
+          for pair in \
+            "dart.hash_aarch64:denial-flutter-dart" \
+            "engine.source_hash_aarch64:denial-flutter-engine-source"; do
+            key="${pair%%:*}"
+            attr="${pair##*:}"
+            got="$(sed -n 's/.*got: *//p' "/tmp/$attr.log" | head -1)"
+            printf '%-28s %s\n' "$key" "${got:-<no got: line>}"
+          done
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: aarch64-hashes
+          path: /tmp/denial-flutter-*.log
+          if-no-files-found: warn
+          retention-days: 7
 
   lock:
     name: Update lock file
     if: inputs.update_lock
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
 
