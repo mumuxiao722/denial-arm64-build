@@ -13,7 +13,7 @@ let
   sourceEngine = pkgs.callPackage ./flutter-engine-source.nix { inherit flutterNixpkgs; };
   minimumGlibc = lib.versions.majorMinor pkgs.stdenv.cc.libc.version;
   minimumCompilerRuntime = lib.versions.majorMinor pkgs.stdenv.cc.cc.version;
-  sourceLockSha256 = builtins.hashFile "sha256" ${denialSource}/prebuilt/flutter-engine/SOURCE_LOCK.json;
+  sourceLockSha256 = builtins.hashFile "sha256" (denialSource + "/prebuilt/flutter-engine/SOURCE_LOCK.json");
 in
 runCommand "denial-flutter-engine-raw-${sourceEngine.version}"
   {

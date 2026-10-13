@@ -4,7 +4,7 @@ rustPlatform.buildRustPackage {
   version = "0.0.0";
   inherit src;
   sourceRoot = "source/native_app";
-  cargoLock.lockFile = ${denialSource}/native_app/Cargo.lock;
+  cargoLock.lockFile = denialSource + "/native_app/Cargo.lock";
   nativeBuildInputs = [ pkg-config ];
   buildInputs = [ wayland libglvnd libxkbcommon ];
   doCheck = true;

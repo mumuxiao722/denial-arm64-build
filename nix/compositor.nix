@@ -32,7 +32,7 @@ rustPlatform.buildRustPackage {
     # filtered store path that is materialized for the build, and recent Nix
     # versions do not guarantee that it exists while import-cargo-lock reads
     # the lock file during evaluation.
-    lockFile = ${denialSource}/compositor/Cargo.lock;
+    lockFile = denialSource + "/compositor/Cargo.lock";
     outputHashes = {
       "smithay-0.7.0" = "sha256-Dov9wh6qGuciLMTwOXM/eRA/Uo4jSvhcCqwJFdB2Vbg=";
       "smithay-drm-extras-0.1.0" = "sha256-Dov9wh6qGuciLMTwOXM/eRA/Uo4jSvhcCqwJFdB2Vbg=";

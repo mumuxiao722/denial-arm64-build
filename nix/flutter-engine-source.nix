@@ -9,13 +9,13 @@
   maintenanceOnly ? false,
 }:
 let
-  sourceLock = lib.importJSON ${denialSource}/prebuilt/flutter-engine/SOURCE_LOCK.json;
+  sourceLock = lib.importJSON (denialSource + "/prebuilt/flutter-engine/SOURCE_LOCK.json");
   nixLock = lib.importJSON ./flutter-engine-lock.json;
-  sourceLockHash = builtins.hashFile "sha256" ${denialSource}/prebuilt/flutter-engine/SOURCE_LOCK.json;
+  sourceLockHash = builtins.hashFile "sha256" (denialSource + "/prebuilt/flutter-engine/SOURCE_LOCK.json");
   flutterVersion = "3.47.5";
   flutterRevision = sourceLock.flutter.revision;
   engineVersion = lib.removeSuffix "\n" (
-    builtins.readFile ${denialSource}/prebuilt/flutter-engine/linux-x64-release/ENGINE_REVISION
+    builtins.readFile (denialSource + "/prebuilt/flutter-engine/linux-x64-release/ENGINE_REVISION")
   );
   dartVersion = nixLock.dart.version;
   flutterNix = flutterNixpkgs + "/pkgs/development/compilers/flutter";
