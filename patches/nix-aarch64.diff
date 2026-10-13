@@ -381,10 +381,24 @@ index 80b10a4..82e1c22 100644
      final.lib.optionalAttrs (flutterNixpkgs != null) { inherit flutterNixpkgs; }
    );
 diff --git a/nix/package.nix b/nix/package.nix
-index fd5d665..b4edec6 100644
+index fd5d665..d3a2e2e 100644
 --- a/nix/package.nix
 +++ b/nix/package.nix
-@@ -402,6 +402,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
+@@ -27,7 +27,12 @@ let
+   sourceFor =
+     roots:
+     lib.fileset.toSource {
+-      root = src.origSrc;
++      # lib.fileset requires a path and rejects a string-like root outright.
++      # Upstream's src defaults to a path literal inside this directory, so the
++      # value arriving here is a path; this fork's src is passed in from the
++      # flake and cleanSourceWith hands origSrc back in whatever form it was
++      # given, so coerce it here rather than relying on where it came from.
++      root = builtins.toPath src.origSrc;
+       fileset = lib.fileset.intersection (lib.fileset.fromSource src) (
+         lib.fileset.unions (map (root: src.origSrc + "/${root}") roots)
+       );
+@@ -402,6 +407,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
        ofl
      ];
      mainProgram = "denial-session";

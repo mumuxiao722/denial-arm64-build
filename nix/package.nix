@@ -27,7 +27,12 @@ let
   sourceFor =
     roots:
     lib.fileset.toSource {
-      root = src.origSrc;
+      # lib.fileset requires a path and rejects a string-like root outright.
+      # Upstream's src defaults to a path literal inside this directory, so the
+      # value arriving here is a path; this fork's src is passed in from the
+      # flake and cleanSourceWith hands origSrc back in whatever form it was
+      # given, so coerce it here rather than relying on where it came from.
+      root = builtins.toPath src.origSrc;
       fileset = lib.fileset.intersection (lib.fileset.fromSource src) (
         lib.fileset.unions (map (root: src.origSrc + "/${root}") roots)
       );

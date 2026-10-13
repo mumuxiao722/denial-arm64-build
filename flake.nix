@@ -49,7 +49,12 @@
           version = "0.0.0+${denial.rev}";
           buildIdentity = "nix.${denial.shortRev}";
           sourceRevision = denial.rev;
-          denialSource = denial.outPath;
+          # A flake input is an attrset and a path is what every consumer
+          # here needs: lib.fileset.toSource rejects a string-like root, and
+          # builtins.storePath, which would be the obvious coercion, is not
+          # allowed in a pure evaluation. toPath is, and it does the same
+          # outPath lookup Nix does when importing a flake input.
+          denialSource = builtins.toPath denial;
           flutterNixpkgs = nixpkgs;
           pluginCollection = denialPlugins;
         };
@@ -154,7 +159,7 @@
           '';
 
           locks = (mkPkgs system).callPackage ./nix/tests/locks.nix {
-            source = denial.outPath;
+            source = builtins.toPath denial;
             flutterSource = (mkPkgs system).denialFlutter.flutterSource;
             pluginCollection = denialPlugins;
           };
