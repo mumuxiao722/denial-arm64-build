@@ -83,47 +83,31 @@ These artifacts are build output, not a software repository.
 
 ## Installing
 
-The compositor and the Flutter engine are released as separate packages, but
-they are not independent: the compositor depends on the engine in every
-distribution below, so installing it pulls the engine in. Install both and let
-the package manager resolve it.
-
-| Distribution | Compositor | Engine | Plugin manager |
-|---|---|---|---|
-| Debian / Ubuntu | `denial` | `denial-flutter-engine` | `denial-plugin-manager`, optional |
-| Fedora / openSUSE | `denial` | `denial-flutter-engine` | `denial-plugin-manager`, optional |
-| Arch | `denial` | `denial-flutter-engine` | `denial-plugin-manager`, optional |
-| Alpine | `denial` | `denial-flutter-engine` | `denial-plugin-manager`, optional |
-
-According to upstream, `denial-plugin-manager` is an optional package for
-installing Denial plugins.
+Every target ships the same three packages under the same names: `denial`,
+`denial-flutter-engine` and `denial-plugin-manager`. According to upstream,
+`denial-plugin-manager` is optional and installs Denial plugins.
 
 ```sh
-# Arch. The engine filename uses + where makepkg puts the epoch's colon,
-# because artifacts cannot contain one. pacman reads the version from inside
-# the package, so the name does not matter.
-sudo pacman -U denial-flutter-engine-*.pkg.tar.gz denial-*.pkg.tar.gz
+# Debian / Ubuntu
+sudo apt install ./denial-flutter-engine_*.deb ./denial_[0-9]*_*.deb
+sudo apt install ./denial-plugin-manager_*.deb                    # optional
+
+# Arch
+sudo pacman -U denial-flutter-engine-*.pkg.tar.gz denial-[0-9]*.pkg.tar.gz
 sudo pacman -U denial-plugin-manager-*.pkg.tar.gz                  # optional
 
 # Fedora
-sudo dnf install ./denial-flutter-engine-*.rpm ./denial-*.rpm
+sudo dnf install ./denial-flutter-engine-*.rpm ./denial-[0-9]*.rpm
 sudo dnf install ./denial-plugin-manager-*.rpm                    # optional
 
 # openSUSE
-sudo zypper install ./denial-flutter-engine-*.rpm ./denial-*.rpm
+sudo zypper install ./denial-flutter-engine-*.rpm ./denial-[0-9]*.rpm
 sudo zypper install ./denial-plugin-manager-*.rpm                 # optional
 
-# Debian / Ubuntu
-sudo apt install ./denial-flutter-engine-*.deb ./denial-*.deb
-sudo apt install ./denial-plugin-manager-*.deb                    # optional
-
 # Alpine
-sudo apk add --allow-untrusted ./*.apk
+sudo apk add --allow-untrusted ./denial-flutter-engine-*.apk ./denial-[0-9]*.apk
 sudo apk add --allow-untrusted ./denial-plugin-manager-*.apk     # optional
 ```
-
-Installing writes `/usr/share/wayland-sessions/denial.desktop`, so Denial
-appears in the session selector of the display manager you already use.
 
 ## License
 
