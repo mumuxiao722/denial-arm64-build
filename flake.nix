@@ -18,14 +18,18 @@
 
     # A path input, not a flake. The overlay reads the taskbar plugin out of it
     # directly; upstream flake.nix:19 pins the same commit.
-    denialPlugins = {
+    #
+    # Not named denialPlugins: upstream declares an input by that name too, so
+    # ours would be written into the lock as denialPlugins_2 to avoid colliding
+    # with the one it brings along.
+    plugins = {
       url = "github:denialwm/denial-plugins/4b7adf998852b09b9a91c1cfab48be58debf2e80";
       flake = false;
     };
   };
 
   outputs =
-    { self, denial, denialPlugins }:
+    { self, denial, plugins }:
     let
       # Upstream's pinned package sets. nixpkgs is not followed: its README says
       # following the host input also changes the engine cache key.
@@ -56,7 +60,7 @@
           # outPath lookup Nix does when importing a flake input.
           denialSource = builtins.toPath denial;
           flutterNixpkgs = nixpkgs;
-          pluginCollection = denialPlugins;
+          pluginCollection = plugins;
         };
 
       mkPkgs =
