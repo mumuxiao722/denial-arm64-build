@@ -11,6 +11,10 @@ on:
         description: Upstream tag or branch, used only when update_lock is set
         type: string
         default: v0.5.0
+      refresh_engine_hashes:
+        description: Re-resolve the two AArch64 hashes in nix/flutter-engine-lock.json
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -44,19 +48,40 @@ jobs:
       - name: Evaluate every output
         run: nix flake check --no-build --accept-flake-config --show-trace
 
-      # nix/flutter-engine-lock.json carries placeholders for the two AArch64
-      # hashes, so these two builds are expected to fail at the fetch, not
-      # compile. Nix prints the real hash as `got:` and that is the whole point
-      # of the step: it turns the placeholders into values that can be
-      # committed. Same trick as upstream's tools/denial-nix refresh-engine-lock.
-      - name: Resolve the AArch64 hashes
+  # One-time bootstrap, and needed again whenever the Dart or Flutter revision
+  # upstream moves. Not part of the check: once the hashes in
+  # nix/flutter-engine-lock.json are real the fetches succeed, and the engine
+  # that follows them compiles from source for hours.
+  engine-hashes:
+    name: Re-resolve the AArch64 engine hashes
+    if: inputs.refresh_engine_hashes
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: cachix/install-nix-action@v31
+
+      # Blanking the two keys puts the placeholders back, so both builds fail at
+      # the fetch and Nix prints the real hash as `got:`. The fetch never
+      # completes, so no compiler runs. Same trick as upstream's
+      # tools/denial-nix refresh-engine-lock.
+      - name: Re-resolve
         run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, pathlib, collections
+          blank = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+          p = pathlib.Path("nix/flutter-engine-lock.json")
+          d = json.loads(p.read_text(), object_pairs_hook=collections.OrderedDict)
+          d["dart"]["hash_aarch64"] = blank
+          d["engine"]["source_hash_aarch64"] = blank
+          p.write_text(json.dumps(d, indent=2) + "\n")
+          PY
           set +e
           for attr in denial-flutter-dart denial-flutter-engine-source; do
             echo "=== $attr ==="
-            nix build ".#$attr" --no-link 2>&1 | tee "/tmp/$attr.log" | tail -5
+            nix build ".#$attr" --no-link 2>&1 | tee "/tmp/$attr.log" | tail -4
           done
-          echo
           for pair in \
             "dart.hash_aarch64:denial-flutter-dart" \
             "engine.source_hash_aarch64:denial-flutter-engine-source"; do
@@ -69,7 +94,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: aarch64-hashes
+          name: aarch64-engine-hashes
           path: /tmp/denial-flutter-*.log
           if-no-files-found: warn
           retention-days: 7

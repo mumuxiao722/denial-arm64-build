@@ -71,6 +71,30 @@
           inherit system;
           overlays = [ localOverlay ];
         };
+
+      # A system that exists to be built and inspected, never booted.
+      # system.build.installRoot is the tree nixos-install lays down, so what it
+      # contains is what a nixos-rebuild switch would be switching to. No
+      # bootloader and no display manager: a display manager would try to start
+      # denial, and whether the compositor runs is the compositor's business,
+      # not this repository's. Nothing here touches the source tree.
+      trialSystem =
+        system:
+        nixpkgs.lib.nixosSystem {
+          inherit system;
+          modules = [
+            self.nixosModules.denial
+            {
+              boot.loader.grub.enable = false;
+              fileSystems."/" = {
+                device = "none";
+                fsType = "tmpfs";
+              };
+              programs.denial.enable = true;
+              system.stateVersion = "26.05";
+            }
+          ];
+        };
     in
     {
       overlays.default = localOverlay;
@@ -108,6 +132,9 @@
           denial-flutter-depot-tools-source = maintenance.depotToolsSource;
           denial-flutter-framework-source = maintenance.fetchedFlutter;
           denial-flutter-dart = maintenance.dart;
+
+          # The image workflow builds this and looks inside.
+          trial-rootfs = (trialSystem system).config.system.build.installRoot;
         }
       );
 
@@ -128,41 +155,14 @@
               module = self.nixosModules.denial;
               nixosSystem = nixpkgsFlake.lib.nixosSystem;
             };
-          evaluated = nixpkgs.lib.nixosSystem {
-            inherit system;
-            modules = [
-              self.nixosModules.denial
-              {
-                boot.loader.grub.enable = false;
-                fileSystems."/" = {
-                  device = "none";
-                  fsType = "tmpfs";
-                };
-                programs.denial.enable = true;
-                system.stateVersion = "26.05";
-              }
-            ];
-          };
-        in
+          in
         {
+          # Evaluated rather than built by the Nix Flake Check workflow: this
+          # compares option values, so it catches a module that stopped wiring
+          # something up without paying for a closure. Whether the closure
+          # builds is packages.trial-rootfs, which has its own workflow.
           module = mkModuleCheck nixpkgs;
           module-unstable = mkModuleCheck nixpkgsUnstable;
-
-          # `nixos-rebuild switch` asks whether system.build.toplevel leaves the
-          # store. The module check above compares strings and would pass with
-          # an unbuildable closure. Referenced as a link target so it is a build
-          # input; a bare interpolation would leave the path alone on the first
-          # line of the script and the shell would try to execute it.
-          nixos-toplevel = (mkPkgs system).runCommand "denial-nixos-toplevel" { } ''
-            mkdir -p $out
-            ln -s ${evaluated.config.system.build.toplevel} $out/system
-          '';
-
-          locks = (mkPkgs system).callPackage ./nix/tests/locks.nix {
-            source = builtins.toPath denial;
-            flutterSource = (mkPkgs system).denialFlutter.flutterSource;
-            pluginCollection = denialPlugins;
-          };
         }
       );
 

@@ -158,7 +158,7 @@ index e15204b..9e35049 100644
 +  meta.platforms = [ "x86_64-linux" "aarch64-linux" ];
  })
 diff --git a/nix/flutter-engine-lock.json b/nix/flutter-engine-lock.json
-index b92d240..485f591 100644
+index b92d240..916c44c 100644
 --- a/nix/flutter-engine-lock.json
 +++ b/nix/flutter-engine-lock.json
 @@ -14,11 +14,13 @@
@@ -167,13 +167,13 @@ index b92d240..485f591 100644
      "revision": "af7e796e161ae0bb1ff0758c71a7105418bd9ded",
 -    "source_hash": "sha256-h7Rond9nStRszAWdelg9PvU5uU9oQO0gnkFBPv9f1To="
 +    "source_hash": "sha256-h7Rond9nStRszAWdelg9PvU5uU9oQO0gnkFBPv9f1To=",
-+    "source_hash_aarch64": "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
++    "source_hash_aarch64": "sha256-ehBQsrXfm1E5L5Sv8UIpDDz/wy++h/9hMbfsUmhFFAg="
    },
    "dart": {
      "version": "3.13.4",
 -    "hash": "sha256-ZIehDfXquJDXRtFKVfTHC+w8HAYz9RgE61BMvA/Dlbs="
 +    "hash": "sha256-ZIehDfXquJDXRtFKVfTHC+w8HAYz9RgE61BMvA/Dlbs=",
-+    "hash_aarch64": "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
++    "hash_aarch64": "sha256-HVRWCb352m+15o+9lqWZ4oNuRO5kN5mRvUST7nZNL9s="
    },
    "swiftshader": {
      "revision": "794b0cfce1d828d187637e6d932bae484fbe0976",
