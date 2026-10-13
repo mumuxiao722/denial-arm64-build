@@ -516,7 +516,7 @@ index fd5d665..10c0289 100644
    };
  })
 diff --git a/nix/plugin-build-kit.nix b/nix/plugin-build-kit.nix
-index 4b0f44f..61a767e 100644
+index 4b0f44f..52aafb1 100644
 --- a/nix/plugin-build-kit.nix
 +++ b/nix/plugin-build-kit.nix
 @@ -7,8 +7,24 @@
@@ -544,17 +544,13 @@ index 4b0f44f..61a767e 100644
  # Package existing Nix engine/compiler outputs. Enabling a plugin never invokes
  # Nix or builds an engine; the manager provisions this kit into user-owned state.
  runCommand "denial-plugin-build-kit"
-@@ -18,11 +34,18 @@ runCommand "denial-plugin-build-kit"
+@@ -18,11 +34,14 @@ runCommand "denial-plugin-build-kit"
      mkdir -p "$HOME"
      cp -R ${src} source
      chmod -R u+w source
-+    # On x86_64 the directory already exists and copying onto itself fails, so
-+    # this only runs where upstream has nothing to copy from.
-+    if [ "$release" != "$upstreamRelease" ]; then
-+      mkdir -p "$release"
-+      cp "$upstreamRelease"/LICENSE.flutter "$release"/LICENSE.flutter
-+      cp "$upstreamRelease"/LICENSE.third_party "$release"/LICENSE.third_party
-+    fi
++    mkdir -p "$release"
++    cp "$upstreamRelease"/LICENSE.flutter "$release"/LICENSE.flutter
++    cp "$upstreamRelease"/LICENSE.third_party "$release"/LICENSE.third_party
      # The Nix engine has store-linked dependencies and therefore its own bytes.
      # Record the exact same engine that nix/dart-shell.nix installs, rather than
      # claiming it has the checksum of the separately packaged native build.
@@ -564,7 +560,7 @@ index 4b0f44f..61a767e 100644
      python3 source/tools/prepare-denial-plugin-kit \
        --source-root source \
        --source-revision ${lib.escapeShellArg sourceRevision} \
-@@ -30,7 +53,7 @@ runCommand "denial-plugin-build-kit"
+@@ -30,7 +49,7 @@ runCommand "denial-plugin-build-kit"
        --flutter-revision ${lib.escapeShellArg denialFlutter.frameworkRevision} \
        --engine-root ${denialFlutter.engine} \
        --engine-source-root ${denialFlutter.engineSource} \

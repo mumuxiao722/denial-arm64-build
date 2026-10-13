@@ -34,13 +34,9 @@ runCommand "denial-plugin-build-kit"
     mkdir -p "$HOME"
     cp -R ${src} source
     chmod -R u+w source
-    # On x86_64 the directory already exists and copying onto itself fails, so
-    # this only runs where upstream has nothing to copy from.
-    if [ "$release" != "$upstreamRelease" ]; then
-      mkdir -p "$release"
-      cp "$upstreamRelease"/LICENSE.flutter "$release"/LICENSE.flutter
-      cp "$upstreamRelease"/LICENSE.third_party "$release"/LICENSE.third_party
-    fi
+    mkdir -p "$release"
+    cp "$upstreamRelease"/LICENSE.flutter "$release"/LICENSE.flutter
+    cp "$upstreamRelease"/LICENSE.third_party "$release"/LICENSE.third_party
     # The Nix engine has store-linked dependencies and therefore its own bytes.
     # Record the exact same engine that nix/dart-shell.nix installs, rather than
     # claiming it has the checksum of the separately packaged native build.
