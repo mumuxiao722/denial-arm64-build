@@ -33,6 +33,14 @@ jobs:
     name: "Build (${{ vars.DENIAL_REF }}, ARM64)"
     runs-on: ubuntu-24.04-arm
 
+    outputs:
+      # Whether all ten uploads succeeded. Each Package step runs on always()
+      # so one broken target does not cancel the other four, which means the
+      # job itself can be green while a distribution produced nothing. The
+      # release reads this rather than needs.build.result.
+      uploads-complete: ${{ steps.upload-gate.outputs.complete }}
+      upload-report: ${{ steps.upload-gate.outputs.report }}
+
     env:
       DENIAL_PC_DEPENDENCY_ROOT: ${{ github.workspace }}/.denial-cache/deps
       DENIAL_PC_BUILD_ROOT: ${{ github.workspace }}/.denial-cache/pc-build
@@ -143,6 +151,13 @@ jobs:
         run: ./tools/denial-pc build
         working-directory: denial
 
+      # Stage runtime builds the payload once. Every package script would
+      # otherwise call stage-denial-runtime itself, so a full run staged it six
+      # times: once here and once inside each of the five Package steps.
+      # It is idempotent, but each repeat costs the copy. The five steps set
+      # DENIAL_PACKAGE_SKIP_STAGE=1, which is the switch those scripts provide
+      # for exactly this; package-denial-arch:47 says so in its own comment:
+      # build and stage once, every format consumes the same bytes.
       - name: "Stage runtime"
         id: stage-runtime
         run: ./tools/stage-denial-runtime
@@ -158,6 +173,8 @@ jobs:
       # it needs with it.
 
       - name: "Package (Debian/Ubuntu deb)"
+        env:
+          DENIAL_PACKAGE_SKIP_STAGE: 1
         id: package-deb
         if: ${{ always() && steps.stage-runtime.conclusion == 'success' }}
         run: ./tools/denial-pc debian-package
@@ -165,11 +182,28 @@ jobs:
 
 
       - name: "Upload Denial deb"
+        id: upload-deb
         if: ${{ always() && steps.package-deb.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
           name: denial-deb-arm64
-          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/*.deb
+          # The compositor and its engine travel together; the plugin manager
+          # is a separate optional component. "[0-9]" is what separates the
+          # compositor from the two denial-<word> packages, since every name
+          # starts with denial- and a plain denial-* would match all three.
+          path: |
+            ${{ github.workspace }}/.denial-cache/pc-build/packages/denial_[0-9]*.deb
+            ${{ github.workspace }}/.denial-cache/pc-build/packages/denial-flutter-engine_*.deb
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: "Upload Denial Plugin Manager deb"
+        id: upload-deb-plugin
+        if: ${{ always() && steps.package-deb.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: denial-deb-plugin-manager-arm64
+          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/denial-plugin-manager_*.deb
           retention-days: 7
           if-no-files-found: error
 
@@ -229,10 +263,12 @@ jobs:
           done
         working-directory: denial
         env:
+          DENIAL_PACKAGE_SKIP_STAGE: 1
           DENIAL_PC_MAKEPKG_ROOT: ${{ github.workspace }}/.denial-cache/pc-build/makepkg
 
 
       - name: "Upload Denial Arch package"
+        id: upload-arch
         if: ${{ always() && steps.package-arch.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
@@ -251,6 +287,7 @@ jobs:
 
 
       - name: "Upload Denial Arch plugin manager"
+        id: upload-arch-plugin
         if: ${{ always() && steps.package-arch.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
@@ -260,6 +297,8 @@ jobs:
           if-no-files-found: error
 
       - name: "Package (Fedora RPM)"
+        env:
+          DENIAL_PACKAGE_SKIP_STAGE: 1
         id: package-fedora
         if: ${{ always() && steps.stage-runtime.conclusion == 'success' }}
         run: |
@@ -272,26 +311,35 @@ jobs:
 
 
       - name: "Upload Denial RPM (Fedora)"
+        id: upload-fedora
         if: ${{ always() && steps.package-fedora.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
           name: denial-rpm-fedora-arm64
-          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/denial-[0-9]*.rpm
+          # The compositor and its engine travel together; the plugin
+          # manager is a separate optional component. "[0-9]" is what
+          # separates the compositor from the two denial-<word> packages,
+          # since every name starts with denial- and a plain denial-* would
+          # match all three.
+          path: |
+            ${{ github.workspace }}/.denial-cache/pc-build/packages/denial-[0-9]*.rpm
+            ${{ github.workspace }}/.denial-cache/pc-build/packages/denial-flutter-engine-*.rpm
           retention-days: 7
           if-no-files-found: error
 
-
-      - name: "Upload Denial Flutter Engine RPM (Fedora)"
+      - name: "Upload Denial Plugin Manager RPM (Fedora)"
+        id: upload-fedora-plugin
         if: ${{ always() && steps.package-fedora.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
-          name: denial-flutter-engine-rpm-fedora-arm64
-          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/denial-flutter-engine-*.rpm
+          name: denial-rpm-plugin-manager-fedora-arm64
+          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/denial-plugin-manager-*.rpm
           retention-days: 7
           if-no-files-found: error
 
-
       - name: "Package (openSUSE RPM)"
+        env:
+          DENIAL_PACKAGE_SKIP_STAGE: 1
         id: package-opensuse
         if: ${{ always() && steps.stage-runtime.conclusion == 'success' }}
         run: ./tools/denial-pc opensuse-package
@@ -299,21 +347,29 @@ jobs:
 
 
       - name: "Upload Denial RPM (openSUSE)"
+        id: upload-opensuse
         if: ${{ always() && steps.package-opensuse.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
           name: denial-rpm-opensuse-arm64
-          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/opensuse/denial-[0-9]*.rpm
+          # The compositor and its engine travel together; the plugin
+          # manager is a separate optional component. "[0-9]" is what
+          # separates the compositor from the two denial-<word> packages,
+          # since every name starts with denial- and a plain denial-* would
+          # match all three.
+          path: |
+            ${{ github.workspace }}/.denial-cache/pc-build/packages/opensuse/denial-[0-9]*.rpm
+            ${{ github.workspace }}/.denial-cache/pc-build/packages/opensuse/denial-flutter-engine-*.rpm
           retention-days: 7
           if-no-files-found: error
 
-
-      - name: "Upload Denial Flutter Engine RPM (openSUSE)"
+      - name: "Upload Denial Plugin Manager RPM (openSUSE)"
+        id: upload-opensuse-plugin
         if: ${{ always() && steps.package-opensuse.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
-          name: denial-flutter-engine-rpm-opensuse-arm64
-          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/opensuse/denial-flutter-engine-*.rpm
+          name: denial-rpm-plugin-manager-opensuse-arm64
+          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/opensuse/denial-plugin-manager-*.rpm
           retention-days: 7
           if-no-files-found: error
 
@@ -326,6 +382,8 @@ jobs:
       # the host and the step passed, so denial-pc alpine-package brings what
       # it needs with it.
       - name: "Package (Alpine APK)"
+        env:
+          DENIAL_PACKAGE_SKIP_STAGE: 1
         id: package-alpine
         # Each target is independent, so one failure must not skip the
         # others. But they all consume what Stage runtime staged, so
@@ -355,16 +413,67 @@ jobs:
 
 
       - name: "Upload Denial APK"
+        id: upload-alpine
         if: ${{ always() && steps.package-alpine.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
           name: denial-apk-arm64
-          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/*.apk
+          # The compositor and its engine travel together; the plugin manager
+          # is a separate optional component. "[0-9]" is what separates the
+          # compositor from the two denial-<word> packages, since every name
+          # starts with denial- and a plain denial-*.apk would match all three.
+          path: |
+            ${{ github.workspace }}/.denial-cache/pc-build/packages/denial-[0-9]*.apk
+            ${{ github.workspace }}/.denial-cache/pc-build/packages/denial-flutter-engine-*.apk
           retention-days: 7
           if-no-files-found: error
 
-      # rpm and rpmbuild are wanted by both RPM targets and by neither of the
-      # other three.
+      - name: "Upload Denial Plugin Manager APK"
+        id: upload-alpine-plugin
+        if: ${{ always() && steps.package-alpine.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: denial-apk-plugin-manager-arm64
+          path: ${{ github.workspace }}/.denial-cache/pc-build/packages/denial-plugin-manager-*.apk
+          retention-days: 7
+          if-no-files-found: error
+
+
+      # Each Package step runs on always(), so a failed target leaves its
+      # upload skipped and the job still green. Collect that here rather than
+      # upload skipped and the job still green. Collect that here rather than
+      # letting the release publish whatever happened to arrive.
+      - name: "Collect upload status"
+        id: upload-gate
+        if: ${{ always() }}
+        env:
+          UPLOADS: |
+            upload-deb ${{ steps.upload-deb.outcome }}
+            upload-deb-plugin ${{ steps.upload-deb-plugin.outcome }}
+            upload-arch ${{ steps.upload-arch.outcome }}
+            upload-arch-plugin ${{ steps.upload-arch-plugin.outcome }}
+            upload-fedora ${{ steps.upload-fedora.outcome }}
+            upload-fedora-plugin ${{ steps.upload-fedora-plugin.outcome }}
+            upload-opensuse ${{ steps.upload-opensuse.outcome }}
+            upload-opensuse-plugin ${{ steps.upload-opensuse-plugin.outcome }}
+            upload-alpine ${{ steps.upload-alpine.outcome }}
+            upload-alpine-plugin ${{ steps.upload-alpine-plugin.outcome }}
+        run: |
+          failed=()
+          while read -r id outcome; do
+            [[ "$outcome" == success ]] || failed+=("$id=$outcome")
+          done <<< "$UPLOADS"
+          if (( ${#failed[@]} )); then
+            report=$(IFS=, ; echo "${failed[*]}")
+            echo "::warning::these uploads did not succeed: ${report//,/, }"
+            echo "complete=false" >> "$GITHUB_OUTPUT"
+            echo "report=$report" >> "$GITHUB_OUTPUT"
+          else
+            echo "complete=true" >> "$GITHUB_OUTPUT"
+            echo "report=all uploads succeeded" >> "$GITHUB_OUTPUT"
+          fi
+
+
   release:
     name: "Publish release"
     needs: build
@@ -375,6 +484,23 @@ jobs:
       contents: write
 
     steps:
+      # A release with a hole in it is worse than no release. Each Package
+      # step runs on always() so one broken target does not cancel the other
+      # four, which also means needs.build.result is success while a
+      # distribution produced nothing and its upload was skipped. This refuses
+      # to publish in that case and names what is missing.
+      - name: "Require every upload to have succeeded"
+        env:
+          COMPLETE: ${{ needs.build.outputs.uploads-complete }}
+          REPORT: ${{ needs.build.outputs.upload-report }}
+        run: |
+          if [[ "$COMPLETE" != true ]]; then
+            echo "::error::Not publishing a release: not every upload succeeded."
+            echo "::error::Failed or skipped: $REPORT"
+            exit 1
+          fi
+          echo "All uploads succeeded: $REPORT"
+
       - name: "Download all packages"
         uses: actions/download-artifact@v8
         with:

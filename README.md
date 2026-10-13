@@ -7,8 +7,11 @@ ARM64 patches for the `tools/denial-pc` build system of
 compositor, plus a GitHub Actions workflow that builds the patched tree on an
 ARM64 runner and packages the result for five distributions.
 
-Upstream `denial-pc` targets x86-64 and has no ARM64 support. This repository
-supplies aarch64 support for the build system and its packaging adapters, and a
+Upstream `denial-pc` is configured to build for x86-64, so its build system does
+not run natively on aarch64. Denial itself supports aarch64 source builds; what
+is missing upstream is a native build path in that script and a release
+pipeline that publishes ARM64 binaries. This repository supplies aarch64
+support for the build system and its packaging adapters, and a
 workflow that turns a Denial tag into RPM, deb, APK and Arch packages.
 
 The patch set was developed inside
@@ -48,34 +51,28 @@ readable with `git diff` afterwards.
 
 ## Host tools
 
-Building needs a C++ and Flutter toolchain: CMake, Ninja, pkg-config, Rust,
-and the development headers for EGL, GL, GBM, GLES, SDL2, input, udev,
-xkbcommon, seat, GLib, GTK and fontconfig. Install them with whatever your
-distribution uses.
+What it takes to compile Denial is written down upstream: see
+[Host requirements](https://github.com/denialwm/denial/blob/v0.5.0/docs/BUILDING.md#host-requirements),
+and `tools/denial-pc doctor` checks it for you. Per-distribution packaging
+tools are documented under
+[Debian, Fedora and openSUSE](https://github.com/denialwm/denial/blob/v0.5.0/docs/BUILDING.md#debian-fedora-and-opensuse-package-adapters)
+and [Arch](https://github.com/denialwm/denial/blob/v0.5.0/docs/packaging/arch/README.md).
 
-`bsdtar` is needed too, by three of the four packaging scripts. `tar` cannot
-replace it: an APK is several gzip streams concatenated, and GNU tar stops
-after the first one, so it never reaches the `.PKGINFO` or the signature
+Two things those documents do not say:
+
+`bsdtar` is needed by all five targets, where upstream names it only for RPM
+output. The deb target reaches it through `verify-denial-native-package-metadata`,
+which requires it, and the APK target through `package-denial-apk`. `tar`
+cannot replace it: an APK is several gzip streams concatenated, and GNU tar
+stops after the first one, so it never reaches the `.PKGINFO` or the signature
 behind it.
 
-Rust takes two steps: install `rustup`, then run `rustup default stable`, and
-make sure `cargo` is on your `PATH` afterwards.
-
-Each packaging script checks for its own tools and stops if one is missing, so
-this is the list it checks:
-
-| Target | Needs |
-|---|---|
-| Fedora, openSUSE | `rpmbuild`, `rpm`, `rpm2cpio` |
-| Debian, Ubuntu | `dpkg-deb` |
-| Arch | `makepkg`, `pacman` |
-| Alpine | `bwrap` |
-
-The APK is for Alpine, but it is not built on Alpine. `package-denial-apk`
-downloads an Alpine root filesystem and runs `abuild` inside it with `bwrap`,
-so the build itself happens from an ordinary glibc host. `gcompat` is a
-runtime dependency of the package that comes out, because Alpine runs on musl
-and that package needs the glibc compatibility layer.
+Denial cannot be compiled on Alpine, even though it runs on musl-based
+systems such as Alpine. The APKBUILD compiles only two small C libraries;
+the compositor, the Flutter engine and the plugin manager are all built
+earlier, on a glibc host, and `package-denial-apk` copies that staged payload
+into a minimal Alpine root filesystem to assemble the `.apk`. The payload is
+linked against glibc, so on Alpine's musl it needs `gcompat` at runtime.
 
 ## Building
 

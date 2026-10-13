@@ -7,9 +7,10 @@
 GitHub Actions 工作流——在 ARM64 runner 上构建打过补丁的源码树，并把结果打包给
 五个发行版。
 
-上游 `denial-pc` 以 x86-64 为目标，不支持 ARM64。本仓库为该构建系统及其打包适配器
-补充 aarch64 支持，并提供一个把 Denial tag 转换为 RPM、deb、APK 和 Arch 安装包的
-工作流。
+上游 `denial-pc` 按 x86-64 配置，它的构建系统无法在 aarch64 上原生运行。Denial 本身是
+支持 aarch64 源码构建的；上游缺的是那个脚本里的原生构建路径，以及发布 ARM64 二进制的
+流水线。本仓库为该构建系统及其打包适配器补充 aarch64 支持，并提供一个把 Denial tag
+转换为 RPM、deb、APK 和 Arch 安装包的工作流。
 
 这套补丁最初在 [fedora-sheng](https://github.com/mumuxiao722/fedora-sheng) 中开发，
 位于 `.github/denial-arm64/` 目录下。现在独立出来，发行版可以只采用 ARM64 补丁，
@@ -43,28 +44,24 @@ minirootfs 换成 aarch64；打过补丁的构建系统会用同一个文件、�
 
 ## 宿主工具
 
-构建阶段需要一套 C++ 与 Flutter 工具链：CMake、Ninja、pkg-config、Rust，以及
-EGL、GL、GBM、GLES、SDL2、input、udev、xkbcommon、seat、GLib、GTK 和 fontconfig
-的开发头文件。按你自己的发行版方式装即可。
+编译 Denial 需要哪些工具，见上游文档的
+[Host requirements](https://github.com/denialwm/denial/blob/v0.5.0/docs/BUILDING.md#host-requirements)
+一节；`tools/denial-pc doctor` 可以直接检查。各发行版的打包工具分别写在
+[Debian、Fedora 与 openSUSE](https://github.com/denialwm/denial/blob/v0.5.0/docs/BUILDING.md#debian-fedora-and-opensuse-package-adapters)
+和 [Arch](https://github.com/denialwm/denial/blob/v0.5.0/docs/packaging/arch/README.md) 文档里。
 
-还需要 `bsdtar`，四个打包脚本里有三个要它。`tar` 替代不了：一个 APK 是好几段 gzip 流
-拼起来的，而 GNU tar 读到第一段就停，看不到后面流里的 `.PKGINFO` 和签名。
+那两份文档没说的有两件事。
 
-Rust 要两步：先装 `rustup`，再跑 `rustup default stable`，之后确保 `cargo` 在 `PATH` 里。
+`bsdtar` 五个目标都要，而上游只在 RPM 那句里提到它。deb 目标经
+`verify-denial-native-package-metadata` 用到它、那个脚本会检查它，APK 目标经
+`package-denial-apk` 用到它。`tar` 替代不了：一个 APK 是好几段 gzip 流拼起来的，
+而 GNU tar 读到第一段就停，看不到后面流里的 `.PKGINFO` 和签名。
 
-每个打包脚本都会检查自己需要的工具，缺一个就退出，所以这就是它检查的清单：
-
-| 目标 | 需要 |
-|---|---|
-| Fedora、openSUSE | `rpmbuild`、`rpm`、`rpm2cpio` |
-| Debian、Ubuntu | `dpkg-deb` |
-| Arch | `makepkg`、`pacman` |
-| Alpine | `bwrap` |
-
-APK 是给 Alpine 用的，但不是在 Alpine 上构建的。`package-denial-apk` 会下载一个
-Alpine 根文件系统，用 `bwrap` 在里面跑 `abuild`，所以构建过程本身是在普通的 glibc
-宿主上进行的。产出包的运行时依赖里有 `gcompat`，因为 Alpine 用的是 musl libc，这个包
-需要 glibc 兼容层。
+Denial 无法在 Alpine 上编译，尽管它能在 Alpine 这样的 musl 发行版上运行。
+APKBUILD 里只编译两个很小的 C 库；合成器、Flutter 引擎和插件管理器都是在
+glibc 宿主上先行构建好的，`package-denial-apk` 把这份已 stage 的产物复制进一个
+精简的 Alpine 根文件系统，再组装成 `.apk`。产物链接的是 glibc，所以在 Alpine 的
+musl 上运行需要 `gcompat`。
 
 ## 构建
 
