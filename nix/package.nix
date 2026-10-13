@@ -40,7 +40,12 @@ let
         let
           relative = lib.removePrefix prefix (toString path);
         in
-        lib.any (entry: relative == entry || lib.hasPrefix "${entry}/" relative) roots;
+        lib.any (
+          entry:
+          relative == entry # the entry itself
+          || lib.hasPrefix "${entry}/" relative # something under it
+          || lib.hasPrefix relative "${entry}/" # a directory on the way to it
+        ) roots;
     in
     lib.cleanSourceWith {
       src = root;
