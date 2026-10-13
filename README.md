@@ -8,11 +8,16 @@ compositor, plus a GitHub Actions workflow that builds the patched tree on an
 ARM64 runner and packages the result for five distributions.
 
 Upstream `denial-pc` is configured to build for x86-64, so its build system does
-not run natively on aarch64. Denial itself supports aarch64 source builds; what
+not run natively on ARM64. Denial itself supports ARM64 source builds; what
 is missing upstream is a native build path in that script and a release
-pipeline that publishes ARM64 binaries. This repository supplies aarch64
+pipeline that publishes ARM64 binaries. This repository supplies ARM64
 support for the build system and its packaging adapters, and a
 workflow that turns a Denial tag into RPM, deb, APK and Arch packages.
+
+Throughout, ARM64 is this repository's own word: it appears in the name, in the
+`ubuntu-24.04-arm` runner, and in the artifact names. `aarch64-linux` shows up
+only where Nix requires it, and `linux-arm64` only where Flutter or Google
+requires it.
 
 The patch set was developed inside
 [fedora-sheng](https://github.com/mumuxiao722/fedora-sheng), where it lived
@@ -42,7 +47,7 @@ python3 /path/to/denial-arm64-builder/patches/arm64-prep.py prep-checkout .
 
 Keep this repository's `patches/` directory alongside the Denial checkout.
 `arm64-prep.py prep-checkout` creates the ARM64 prebuilt metadata directories
-Denial checks against, and retargets the Alpine minirootfs to aarch64; the
+Denial checks against, and retargets the Alpine minirootfs to ARM64; the
 patched build system calls the same file with `patch-deps` to rewrite the
 `DEPS` that `gclient sync` fetches.
 

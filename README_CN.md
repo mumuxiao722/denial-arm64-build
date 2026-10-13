@@ -7,10 +7,13 @@
 GitHub Actions 工作流——在 ARM64 runner 上构建打过补丁的源码树，并把结果打包给
 五个发行版。
 
-上游 `denial-pc` 按 x86-64 配置，它的构建系统无法在 aarch64 上原生运行。Denial 本身是
-支持 aarch64 源码构建的；上游缺的是那个脚本里的原生构建路径，以及发布 ARM64 二进制的
-流水线。本仓库为该构建系统及其打包适配器补充 aarch64 支持，并提供一个把 Denial tag
+上游 `denial-pc` 按 x86-64 配置，它的构建系统无法在 ARM64 上原生运行。Denial 本身是
+支持 ARM64 源码构建的；上游缺的是那个脚本里的原生构建路径，以及发布 ARM64 二进制的
+流水线。本仓库为该构建系统及其打包适配器补充 ARM64 支持，并提供一个把 Denial tag
 转换为 RPM、deb、APK 和 Arch 安装包的工作流。
+
+全文统一用 ARM64：本仓库名、`ubuntu-24.04-arm` runner 和产物名都是这个词。`aarch64-linux`
+只出现在 Nix 强制要求的地方，`linux-arm64` 只出现在 Flutter 或 Google 强制要求的地方。
 
 这套补丁最初在 [fedora-sheng](https://github.com/mumuxiao722/fedora-sheng) 中开发，
 位于 `.github/denial-arm64/` 目录下。现在独立出来，发行版可以只采用 ARM64 补丁，
@@ -37,7 +40,7 @@ python3 /path/to/denial-arm64-builder/patches/arm64-prep.py prep-checkout .
 
 请把本仓库的 `patches/` 目录放在 Denial 检出目录旁边。`arm64-prep.py
 prep-checkout` 用来创建 Denial 校验所需的 ARM64 prebuilt 元数据目录，并把 Alpine
-minirootfs 换成 aarch64；打过补丁的构建系统会用同一个文件、传入 `patch-deps`
+minirootfs 换成 ARM64；打过补丁的构建系统会用同一个文件、传入 `patch-deps`
 参数，去改写 `gclient sync` 拉取的 `DEPS`。
 
 这个 diff 包含针对 `v0.5.0` 的全部改动，所以打完之后用 `git diff` 就能看清它做了什么。
