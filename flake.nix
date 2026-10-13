@@ -71,26 +71,6 @@
             inherit system;
             overlays = [ self.overlays.default ];
           };
-          # Same minimal configuration upstream's own module check evaluates
-          # (nix/tests/module.nix:28-35), so the two checks describe the same
-          # system.
-          hostModule =
-            nixpkgsFlake: { ... }:
-            nixpkgsFlake.lib.nixosSystem {
-              inherit system;
-              modules = [
-                self.nixosModules.denial
-                {
-                  boot.loader.grub.enable = false;
-                  fileSystems."/" = {
-                    device = "none";
-                    fsType = "tmpfs";
-                  };
-                  programs.denial.enable = true;
-                  system.stateVersion = "26.05";
-                }
-              ];
-            };
         in
         {
           # Upstream's checks.module passes its own self.nixosModules.denial
@@ -121,7 +101,24 @@
           # engine comes from denial.cachix.org, so what is left to compile is
           # the Rust compositor and the Flutter applications.
           nixos-toplevel = let
-            evaluated = hostModule denial.inputs.nixpkgs;
+            # The same minimal configuration upstream's own module check
+            # evaluates (nix/tests/module.nix:28-35), so both checks describe
+            # one system.
+            evaluated = denial.inputs.nixpkgs.lib.nixosSystem {
+              inherit system;
+              modules = [
+                self.nixosModules.denial
+                {
+                  boot.loader.grub.enable = false;
+                  fileSystems."/" = {
+                    device = "none";
+                    fsType = "tmpfs";
+                  };
+                  programs.denial.enable = true;
+                  system.stateVersion = "26.05";
+                }
+              ];
+            };
           in
           (mkPkgs denial.inputs.nixpkgs).runCommand "denial-nixos-toplevel" { } ''
             ${evaluated.config.system.build.toplevel}
