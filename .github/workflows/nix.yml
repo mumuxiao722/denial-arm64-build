@@ -37,11 +37,6 @@ jobs:
 
       - uses: DeterminateSystems/magic-nix-cache-action@v9
 
-      - name: Diagnose the path types
-        run: |
-          nix eval --impure --json --expr 'builtins.typeOf (builtins.toPath (builtins.getFlake "github:denialwm/denial/c56aa2d6e8d70bd87b279e4edd70588c7ec15a6d").outPath)'
-          nix eval --impure --json --expr 'builtins.isPath (builtins.toPath (builtins.getFlake "github:denialwm/denial/c56aa2d6e8d70bd87b279e4edd70588c7ec15a6d").outPath)'
-
       - name: flake check
         # checks.nixos-toplevel builds config.system.build.toplevel, which is
         # the Rust compositor plus the Flutter applications. The engine itself

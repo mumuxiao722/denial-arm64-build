@@ -26,16 +26,26 @@
 let
   sourceFor =
     roots:
-    lib.fileset.toSource {
-      # lib.fileset requires a path and rejects a string-like root outright.
-      # Upstream's src defaults to a path literal inside this directory, so the
-      # value arriving here is a path; this fork's src is passed in from the
-      # flake and cleanSourceWith hands origSrc back in whatever form it was
-      # given, so coerce it here rather than relying on where it came from.
-      root = builtins.toPath src.origSrc;
-      fileset = lib.fileset.intersection (lib.fileset.fromSource src) (
-        lib.fileset.unions (map (root: src.origSrc + "/${root}") roots)
-      );
+    # AArch64 port. Upstream builds this with lib.fileset.toSource, which
+    # refuses anything that is not a path -- a path is only ever a literal in
+    # the source, so it works for upstream's `src ? ../.` and cannot work for a
+    # src handed in from a flake. toSource's own success branch is this very
+    # cleanSourceWith call, so the filter is reproduced here instead of the
+    # fileset machinery, and the string that origSrc is does not matter.
+    let
+      root = src.origSrc;
+      prefix = "${toString root}/";
+      keeps =
+        path: type:
+        let
+          relative = lib.removePrefix prefix (toString path);
+        in
+        lib.any (entry: relative == entry || lib.hasPrefix "${entry}/" relative) roots;
+    in
+    lib.cleanSourceWith {
+      src = root;
+      name = "denial-source";
+      filter = keeps;
     };
   compositor = callPackage ./compositor.nix {
     src = sourceFor [

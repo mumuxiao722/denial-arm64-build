@@ -381,24 +381,41 @@ index 80b10a4..82e1c22 100644
      final.lib.optionalAttrs (flutterNixpkgs != null) { inherit flutterNixpkgs; }
    );
 diff --git a/nix/package.nix b/nix/package.nix
-index fd5d665..d3a2e2e 100644
+index fd5d665..58881ad 100644
 --- a/nix/package.nix
 +++ b/nix/package.nix
-@@ -27,7 +27,12 @@ let
+@@ -26,11 +26,26 @@
+ let
    sourceFor =
      roots:
-     lib.fileset.toSource {
--      root = src.origSrc;
-+      # lib.fileset requires a path and rejects a string-like root outright.
-+      # Upstream's src defaults to a path literal inside this directory, so the
-+      # value arriving here is a path; this fork's src is passed in from the
-+      # flake and cleanSourceWith hands origSrc back in whatever form it was
-+      # given, so coerce it here rather than relying on where it came from.
-+      root = builtins.toPath src.origSrc;
-       fileset = lib.fileset.intersection (lib.fileset.fromSource src) (
-         lib.fileset.unions (map (root: src.origSrc + "/${root}") roots)
-       );
-@@ -402,6 +407,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
+-    lib.fileset.toSource {
++    # AArch64 port. Upstream builds this with lib.fileset.toSource, which
++    # refuses anything that is not a path -- a path is only ever a literal in
++    # the source, so it works for upstream's `src ? ../.` and cannot work for a
++    # src handed in from a flake. toSource's own success branch is this very
++    # cleanSourceWith call, so the filter is reproduced here instead of the
++    # fileset machinery, and the string that origSrc is does not matter.
++    let
+       root = src.origSrc;
+-      fileset = lib.fileset.intersection (lib.fileset.fromSource src) (
+-        lib.fileset.unions (map (root: src.origSrc + "/${root}") roots)
+-      );
++      prefix = "${toString root}/";
++      keeps =
++        path: type:
++        let
++          relative = lib.removePrefix prefix (toString path);
++        in
++        lib.any (entry: relative == entry || lib.hasPrefix "${entry}/" relative) roots;
++    in
++    lib.cleanSourceWith {
++      src = root;
++      name = "denial-source";
++      filter = keeps;
+     };
+   compositor = callPackage ./compositor.nix {
+     src = sourceFor [
+@@ -402,6 +417,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
        ofl
      ];
      mainProgram = "denial-session";
