@@ -44,10 +44,17 @@
       ];
       forAllSystems = lib.genAttrs supportedSystems;
 
-      # The fork in ./nix. Upstream pins its own Nix packaging to x86_64-linux
-      # (upstream flake.nix:30); this one carries the AArch64 port, which needed
-      # a dart and engine source hash that upstream has never had. See
-      # patches/nix-aarch64.diff for the whole delta.
+      # A fork of upstream's own Nix packaging, under nix/. Upstream pins that
+      # to x86_64-linux (upstream flake.nix:30); this one also builds on
+      # AArch64, which needed a dart and engine source hash upstream has never
+      # had. To see what it changes:
+      #
+      #   git clone https://github.com/denialwm/denial
+      #   git -C denial checkout "$DENIAL_REV"
+      #   diff -ru denial/nix nix
+      #
+      # Where each change came from is in the history of the files themselves:
+      # the fork landed in 936277d and the AArch64 sweep in 55c2ae1.
       localOverlay =
         import ./nix/overlay.nix {
           version = "0.0.0+${denial.rev}";
