@@ -12,9 +12,6 @@ GitHub Actions 工作流——在 ARM64 runner 上构建打过补丁的源码树
 流水线。本仓库为该构建系统及其打包适配器补充 ARM64 支持，并提供一个把 Denial tag
 转换为 RPM、deb、APK 和 Arch 安装包的工作流。
 
-全文统一用 ARM64：本仓库名、`ubuntu-24.04-arm` runner 和产物名都是这个词。`aarch64-linux`
-只出现在 Nix 强制要求的地方，`linux-arm64` 只出现在 Flutter 或 Google 强制要求的地方。
-
 这套补丁最初在 [fedora-sheng](https://github.com/mumuxiao722/fedora-sheng) 中开发，
 位于 `.github/denial-arm64/` 目录下。现在独立出来，发行版可以只采用 ARM64 补丁，
 而不必连带那个镜像构建项目的其余部分。
@@ -72,6 +69,28 @@ Fork 本仓库，在 Actions 页面运行工作流。它在 ARM64 runner 上构�
 产物上传，保留七天；勾选 `publish_release` 则改为附到一个 GitHub release 上。
 这些产物是构建输出，不构成软件源。
 
+## Nix
+
+仓库里有一个 flake，钉住同一个 Denial 版本，使用上游自己的 Nix 打包，移植到了 ARM64。上游
+把那份打包钉死在 x86_64-linux，而且没有 ARM64 的引擎哈希，所以移植必须补上一个 Dart SDK
+的和一个引擎源码闭包的；两个值都在 `nix/flutter-engine-lock.json` 里。
+
+| 输出 | 是什么 |
+|---|---|
+| `nixosModules.denial` | NixOS 模块，`programs.denial.enable` |
+| `overlays.default` | `denial`、`denialPluginManager`，以及引擎 |
+| `packages.<system>.trial-rootfs` | 一个最小系统，只为被检查而构建 |
+
+ARM64 的引擎在 denial.cachix.org 上没有，构建要几小时。
+
+两个 workflow，都是 `workflow_dispatch`：
+
+| Workflow | Job |
+|---|---|
+| Nix Flake Check | **Evaluate the flake on AArch64** —— 几秒钟 |
+| | **Resolve the AArch64 engine hashes** —— 只在勾了 `refresh_engine_hashes` 时跑。清空两个哈希再解析一次，报告 Nix 打印的 `got:` |
+| Nix System Check | **Build a minimal NixOS system and check what it contains** —— 几小时 |
+
 ## 安装
 
 每个目标都以相同的名字提供同样的三个包：`denial`、`denial-flutter-engine`
@@ -99,6 +118,47 @@ sudo zypper install ./denial-plugin-manager-*.rpm                 # 可选
 sudo apk add --allow-untrusted ./denial-flutter-engine-*.apk ./denial-[0-9]*.apk
 sudo apk add --allow-untrusted ./denial-plugin-manager-*.apk     # 可选
 ```
+
+### 用 Nix
+
+flake 里带了 NixOS 模块和 overlay：
+
+```nix
+{
+  inputs.denial.url = "github:mumuxiao722/denial-arm64-builder";
+
+  outputs =
+    { nixpkgs, denial, ... }:
+    {
+      nixosConfigurations.my-host = nixpkgs.lib.nixosSystem {
+        system = "aarch64-linux";
+        modules = [
+          denial.nixosModules.default
+          {
+            programs.denial.enable = true;
+            programs.denial.plugins.enable = true; # 插件管理器
+          }
+        ];
+      };
+    };
+}
+```
+
+重建系统，然后在你在用的显示管理器里选 **Denial**；模块不会启用显示管理器。
+`programs.denial.package` 可以只换包而不换模块。
+
+不在 NixOS 上时 overlay 就够：
+
+```nix
+nixpkgs.overlays = [ inputs.denial.overlays.default ];
+environment.systemPackages = [
+  pkgs.denial
+  pkgs.denialPluginManager
+];
+```
+
+ARM64 的引擎不在 `denial.cachix.org` 上——那个缓存只有上游的 x86_64 产物，架构不同 store
+路径也不同，一个都命中不了。所以不需要配置它。代价是第一次会从源码编译引擎，要几小时。
 
 ## 许可证
 

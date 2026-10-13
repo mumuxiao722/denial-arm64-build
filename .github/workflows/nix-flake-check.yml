@@ -23,12 +23,14 @@ concurrency:
 # changes can be caught by.
 jobs:
   check:
-    name: Flake check (aarch64)
+    name: Evaluate the flake on AArch64
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
+        name: Check out this repository
 
       - uses: cachix/install-nix-action@v31
+        name: Install Nix
         with:
           # flake.nix declares these in nixConfig, but that is only applied to
           # a flake under --accept-flake-config, so the runner needs them
@@ -45,19 +47,21 @@ jobs:
   # nix/flutter-engine-lock.json are real the fetches succeed, and the engine
   # that follows them compiles from source for hours.
   engine-hashes:
-    name: Re-resolve the AArch64 engine hashes
+    name: Resolve the AArch64 engine hashes
     if: inputs.refresh_engine_hashes
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
+        name: Check out this repository
 
       - uses: cachix/install-nix-action@v31
+        name: Install Nix
 
       # Blanking the two keys puts the placeholders back, so both builds fail at
       # the fetch and Nix prints the real hash as `got:`. The fetch never
       # completes, so no compiler runs. Same trick as upstream's
       # tools/denial-nix refresh-engine-lock.
-      - name: Re-resolve
+      - name: Blank the hashes and resolve them again
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -84,6 +88,7 @@ jobs:
           done
 
       - uses: actions/upload-artifact@v7
+        name: Upload the build logs
         if: always()
         with:
           name: aarch64-engine-hashes

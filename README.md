@@ -14,11 +14,6 @@ pipeline that publishes ARM64 binaries. This repository supplies ARM64
 support for the build system and its packaging adapters, and a
 workflow that turns a Denial tag into RPM, deb, APK and Arch packages.
 
-Throughout, ARM64 is this repository's own word: it appears in the name, in the
-`ubuntu-24.04-arm` runner, and in the artifact names. `aarch64-linux` shows up
-only where Nix requires it, and `linux-arm64` only where Flutter or Google
-requires it.
-
 The patch set was developed inside
 [fedora-sheng](https://github.com/mumuxiao722/fedora-sheng), where it lived
 under `.github/denial-arm64/`. It is now separate, so a distribution can adopt
@@ -86,6 +81,30 @@ ARM64 runner and uploads the packages as workflow artifacts, which are kept for
 seven days; check `publish_release` to attach them to a GitHub release instead.
 These artifacts are build output, not a software repository.
 
+## Nix
+
+There is a flake that pins the same Denial release and imports upstream's own
+Nix packaging, ported to AArch64. Upstream pins that packaging to x86_64-linux
+and carries no AArch64 engine hash, so the port had to add one for the Dart SDK
+and one for the engine source closure; both are in
+`nix/flutter-engine-lock.json`.
+
+| Output | What it is |
+|---|---|
+| `nixosModules.denial` | The NixOS module, `programs.denial.enable` |
+| `overlays.default` | `denial`, `denialPluginManager`, and the engine |
+| `packages.<system>.trial-rootfs` | A minimal system, built only to be looked at |
+
+AArch64 has no engine on denial.cachix.org, so building takes hours.
+
+Two workflows, both `workflow_dispatch`:
+
+| Workflow | Job |
+|---|---|
+| Nix Flake Check | **Evaluate the flake on AArch64** — seconds |
+| | **Resolve the AArch64 engine hashes** — only when `refresh_engine_hashes` is set. Blanks the two hashes and resolves them again, reporting what Nix prints as `got:`. |
+| Nix System Check | **Build a minimal NixOS system and check what it contains** — hours |
+
 ## Installing
 
 Every target ships the same three packages under the same names: `denial`,
@@ -113,6 +132,51 @@ sudo zypper install ./denial-plugin-manager-*.rpm                 # optional
 sudo apk add --allow-untrusted ./denial-flutter-engine-*.apk ./denial-[0-9]*.apk
 sudo apk add --allow-untrusted ./denial-plugin-manager-*.apk     # optional
 ```
+
+### With Nix
+
+The flake carries a NixOS module and an overlay:
+
+```nix
+{
+  inputs.denial.url = "github:mumuxiao722/denial-arm64-builder";
+
+  outputs =
+    { nixpkgs, denial, ... }:
+    {
+      nixosConfigurations.my-host = nixpkgs.lib.nixosSystem {
+        system = "aarch64-linux";
+        modules = [
+          denial.nixosModules.default
+          {
+            programs.denial.enable = true;
+            programs.denial.plugins.enable = true; # The plugin manager.
+          }
+        ];
+      };
+    };
+}
+```
+
+Rebuild the system, then choose **Denial** in the display manager you already
+use; the module does not enable one. `programs.denial.package` replaces the
+package without replacing the module.
+
+Outside NixOS the overlay is enough:
+
+```nix
+nixpkgs.overlays = [ inputs.denial.overlays.default ];
+environment.systemPackages = [
+  pkgs.denial
+  pkgs.denialPluginManager
+];
+```
+
+The engine is not on `denial.cachix.org` on AArch64: that cache carries
+upstream's x86_64 output, and a different architecture is a different store
+path, so nothing in it is ever hit and there is nothing to configure. What that
+costs is that the engine is compiled from source the first time, which takes
+hours.
 
 ## License
 

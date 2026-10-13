@@ -1,4 +1,4 @@
-name: Nix Switch Check
+name: Nix System Check
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: nix-switch-check-${{ github.ref }}
+  group: nix-system-check-${{ github.ref }}
   cancel-in-progress: false
 
 # Deliberately not a check. denial.cachix.org carries only the x86_64 engine, so
@@ -15,10 +15,9 @@ concurrency:
 # Nothing here is automatic: it runs when someone wants to know whether the
 # system still comes out of the store, not on every push.
 #
-# Named for the question it answers: can a NixOS system with this module in it be
-# built and switched to. What it actually does is build system.build.toplevel
-# and look at what came out, because running switch-to-configuration needs a
-# running NixOS to run it on and the ARM64 runner is Ubuntu.
+# Builds system.build.toplevel and looks at what came out of it. It does not run
+# switch-to-configuration: that needs a running NixOS to run it on, and the
+# ARM64 runner is Ubuntu.
 #
 # The output is not a deliverable. Nothing installs it, nobody ships it, and it
 # is deliberately missing a bootloader and a display manager -- a display manager
@@ -26,27 +25,34 @@ concurrency:
 # business, since nothing here touches its source.
 jobs:
   build:
-    name: Build a minimal system
+    name: Build a minimal NixOS system and check what it contains
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
+        name: Check out this repository
 
       - uses: cachix/install-nix-action@v31
+        name: Install Nix
         with:
           extra_nix_config: |
             extra-substituters = https://denial.cachix.org
             extra-trusted-public-keys = denial.cachix.org-1:wd8YTnvPmugFrtdMJWtR1XdVknR3/g2nmBJkT+vAruo=
 
-      - name: Build the package
-        run: nix build .#denial -o package --accept-flake-config --show-trace
+      - name: Build the Denial package
+        run: |
+          # --print-build-logs streams every derivation's full log. Without it a
+          # failure only reports its last 25 lines, which on a Rust build are
+          # warnings and hide the errors above them.
+          nix build .#denial -o package --accept-flake-config --show-trace \
+            --print-build-logs --keep-failed
 
-      - name: Build a minimal system around it
+      - name: Build the minimal system around it
         run: nix build .#trial-rootfs -o result --accept-flake-config --show-trace
 
       # The compositor, its engine and the session entry are what the module is
       # for. Checked on the package rather than the system because inside a
       # toplevel /bin and /lib are symlinks into the store, not a merged tree.
-      - name: The compositor and its engine are in the package
+      - name: Check the compositor, its engine and its applications
         run: |
           set -euo pipefail
           for path in \
@@ -65,7 +71,7 @@ jobs:
             echo "  ok  $path"
           done
 
-      - name: The engine matches the architecture it was built for
+      - name: Check that the engine is an AArch64 binary
         run: |
           set -euo pipefail
           # A store path holding the x86_64 engine would pass every existence
@@ -77,7 +83,7 @@ jobs:
       # This is the half that is actually about the module: the session entry a
       # display manager reads, the two configuration files the launcher treats
       # as declarative input, and the portal the module wires up.
-      - name: The module put its files in /etc
+      - name: Check what the module put in /etc
         run: |
           set -euo pipefail
           for path in \
@@ -91,11 +97,12 @@ jobs:
             echo "  ok  $path"
           done
 
-      - name: List what was installed
+      - name: List what landed in /etc
         run: |
           find result/etc -maxdepth 3 | sort | head -40
 
       - uses: actions/upload-artifact@v7
+        name: Upload the files that were checked
         with:
           name: install-check-listing
           path: |

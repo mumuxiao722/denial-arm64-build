@@ -1,16 +1,6 @@
 {
   description = "Denial Nix packaging, pinned to upstream v0.5.0";
 
-  # A flake's nixConfig is not inherited when the flake is consumed as an
-  # input, so upstream's denial.cachix.org settings have to be repeated here or
-  # every engine lookup misses. Same two values as upstream flake.nix:8-11.
-  nixConfig = {
-    extra-substituters = [ "https://denial.cachix.org" ];
-    extra-trusted-public-keys = [
-      "denial.cachix.org-1:wd8YTnvPmugFrtdMJWtR1XdVknR3/g2nmBJkT+vAruo="
-    ];
-  };
-
   inputs = {
     # v0.5.0. A commit rather than the tag, so the reviewed text says exactly
     # what was reviewed; it is what the annotated, PGP-signed tag points at.
