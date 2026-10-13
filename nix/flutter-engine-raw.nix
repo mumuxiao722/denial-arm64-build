@@ -10,7 +10,10 @@
   flutterNixpkgs ? pkgs.path,
 }:
 let
-  sourceEngine = pkgs.callPackage ./flutter-engine-source.nix { inherit flutterNixpkgs; };
+  # pkgs here is the producer's set, not the host's, for the same reason.
+  sourceEngine = pkgs.callPackage ./flutter-engine-source.nix {
+    inherit flutterNixpkgs denialSource;
+  };
   minimumGlibc = lib.versions.majorMinor pkgs.stdenv.cc.libc.version;
   minimumCompilerRuntime = lib.versions.majorMinor pkgs.stdenv.cc.cc.version;
   sourceLockSha256 = builtins.hashFile "sha256" (denialSource + "/prebuilt/flutter-engine/SOURCE_LOCK.json");

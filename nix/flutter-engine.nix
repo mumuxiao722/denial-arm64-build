@@ -111,8 +111,12 @@ let
   # Never import the consumer's overlays or native overrides into the producer.
   # Its derivation stays identical when the host Nixpkgs changes.
   enginePkgs = import flutterNixpkgs { system = stdenv.hostPlatform.system; };
+  # enginePkgs deliberately has no overlay, so callPackage cannot fill
+  # denialSource from it the way it fills the host's arguments. A path to the
+  # source is not an overlay, and passing it does not make the producer depend
+  # on the host's package set.
   pinnedRawEngine = enginePkgs.callPackage ./flutter-engine-raw.nix {
-    inherit flutterNixpkgs;
+    inherit flutterNixpkgs denialSource;
   };
   hostSupportsPinnedEngine = import ./engine-compatible.nix {
     inherit lib;

@@ -149,7 +149,7 @@ index b92d240..485f591 100644
    "swiftshader": {
      "revision": "794b0cfce1d828d187637e6d932bae484fbe0976",
 diff --git a/nix/flutter-engine-raw.nix b/nix/flutter-engine-raw.nix
-index 0c704bd..f2998b6 100644
+index 0c704bd..ad9dcc3 100644
 --- a/nix/flutter-engine-raw.nix
 +++ b/nix/flutter-engine-raw.nix
 @@ -1,6 +1,7 @@
@@ -160,8 +160,15 @@ index 0c704bd..f2998b6 100644
    pkgs,
    runCommand,
    python3,
-@@ -12,7 +13,7 @@ let
-   sourceEngine = pkgs.callPackage ./flutter-engine-source.nix { inherit flutterNixpkgs; };
+@@ -9,10 +10,13 @@
+   flutterNixpkgs ? pkgs.path,
+ }:
+ let
+-  sourceEngine = pkgs.callPackage ./flutter-engine-source.nix { inherit flutterNixpkgs; };
++  # pkgs here is the producer's set, not the host's, for the same reason.
++  sourceEngine = pkgs.callPackage ./flutter-engine-source.nix {
++    inherit flutterNixpkgs denialSource;
++  };
    minimumGlibc = lib.versions.majorMinor pkgs.stdenv.cc.libc.version;
    minimumCompilerRuntime = lib.versions.majorMinor pkgs.stdenv.cc.cc.version;
 -  sourceLockSha256 = builtins.hashFile "sha256" ../prebuilt/flutter-engine/SOURCE_LOCK.json;
@@ -169,7 +176,7 @@ index 0c704bd..f2998b6 100644
  in
  runCommand "denial-flutter-engine-raw-${sourceEngine.version}"
    {
-@@ -36,7 +37,7 @@ runCommand "denial-flutter-engine-raw-${sourceEngine.version}"
+@@ -36,7 +40,7 @@ runCommand "denial-flutter-engine-raw-${sourceEngine.version}"
          ;
        producerNixpkgsVersion = lib.version;
      };
@@ -178,7 +185,7 @@ index 0c704bd..f2998b6 100644
    }
    ''
      mkdir -p $out/out/host_release $out/licenses
-@@ -49,8 +50,8 @@ runCommand "denial-flutter-engine-raw-${sourceEngine.version}"
+@@ -49,8 +53,8 @@ runCommand "denial-flutter-engine-raw-${sourceEngine.version}"
      done
      cp ${sourceEngine.src}/src/flutter/shell/platform/embedder/embedder.h \
        $out/out/host_release/flutter_embedder.h
@@ -189,7 +196,7 @@ index 0c704bd..f2998b6 100644
      chmod -R u+w $out
      # Neutralize the producer's loader/search paths on copies. These binaries
      # are build inputs, and must be adapted before execution on a NixOS host.
-@@ -75,7 +76,7 @@ runCommand "denial-flutter-engine-raw-${sourceEngine.version}"
+@@ -75,7 +79,7 @@ runCommand "denial-flutter-engine-raw-${sourceEngine.version}"
        fi
      done < <(find $out -type f -print0)
      python3 ${./engine-manifest.py} create "$out" \
@@ -264,7 +271,7 @@ index df23c4a..cdc3844 100644
      url = "${sourceLock.flutter.repository}@${flutterRevision}";
      patches = [ ];
 diff --git a/nix/flutter-engine.nix b/nix/flutter-engine.nix
-index ecd2dc2..af85f4c 100644
+index ecd2dc2..363c8bf 100644
 --- a/nix/flutter-engine.nix
 +++ b/nix/flutter-engine.nix
 @@ -1,5 +1,6 @@
@@ -319,6 +326,20 @@ index ecd2dc2..af85f4c 100644
        hash = dartHash;
      };
    });
+@@ -97,8 +111,12 @@ let
+   # Never import the consumer's overlays or native overrides into the producer.
+   # Its derivation stays identical when the host Nixpkgs changes.
+   enginePkgs = import flutterNixpkgs { system = stdenv.hostPlatform.system; };
++  # enginePkgs deliberately has no overlay, so callPackage cannot fill
++  # denialSource from it the way it fills the host's arguments. A path to the
++  # source is not an overlay, and passing it does not make the producer depend
++  # on the host's package set.
+   pinnedRawEngine = enginePkgs.callPackage ./flutter-engine-raw.nix {
+-    inherit flutterNixpkgs;
++    inherit flutterNixpkgs denialSource;
+   };
+   hostSupportsPinnedEngine = import ./engine-compatible.nix {
+     inherit lib;
 diff --git a/nix/native-app.nix b/nix/native-app.nix
 index cd48eab..e9b10ee 100644
 --- a/nix/native-app.nix
