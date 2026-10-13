@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+"""Re-extract upstream's nix/ and re-apply the AArch64 port.
+
+The fork under nix/ is committed rather than patched at flake evaluation time:
+Nix cannot apply a patch during a pure evaluation, so the vendored copy is the
+mechanism. patches/nix-aarch64.diff is the description of what the port changed,
+kept for review and used here to reproduce the fork from upstream.
+
+    tools/regenerate-nix-fork --ref v0.5.0
+
+Without --ref the commit baked into flake.nix is used. With --check nothing is
+written and the exit status says whether the committed copy still matches; the
+Nix workflow runs that.
+"""
+
+import argparse
+import pathlib
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+FLAKE = ROOT / "flake.nix"
+NIX = ROOT / "nix"
+PATCH = ROOT / "patches" / "nix-aarch64.diff"
+
+
+def pinned_ref() -> str:
+    text = FLAKE.read_text(encoding="utf-8")
+    match = re.search(r"denial\.url\s*=\s*\"github:denialwm/denial/([0-9a-f]{40})\"", text)
+    if not match:
+        sys.exit("flake.nix does not pin denial to a commit literal")
+    return match.group(1)
+
+
+def upstream_nix(ref: str, dest: pathlib.Path) -> None:
+    with tempfile.TemporaryDirectory() as work:
+        checkout = pathlib.Path(work) / "denial"
+        subprocess.run(
+            ["git", "clone", "--quiet", "--depth", "1", "--branch", ref,
+             "https://github.com/denialwm/denial", str(checkout)],
+            check=True,
+        )
+        source = checkout / "nix"
+        if not source.is_dir():
+            sys.exit(f"{ref} has no nix/ directory")
+        shutil.copytree(source, dest)
+
+
+def apply_patch(staging: pathlib.Path) -> None:
+    subprocess.run(["git", "apply", "-p1", "--whitespace=nowarn", str(PATCH)],
+                   cwd=staging, check=True)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ref", help="upstream tag or commit; default is the flake's pin")
+    parser.add_argument("--check", action="store_true",
+                        help="verify the committed copy, write nothing")
+    args = parser.parse_args()
+
+    ref = args.ref or pinned_ref()
+    with tempfile.TemporaryDirectory() as work:
+        staging = pathlib.Path(work) / "tree"
+        staging.mkdir()
+        upstream_nix(ref, staging / "nix")
+        try:
+            apply_patch(staging)
+        except subprocess.CalledProcessError:
+            print(f"the port does not apply to upstream {ref} cleanly", file=sys.stderr)
+            return 1
+
+        regenerated = staging / "nix"
+        if args.check:
+            result = subprocess.run(["diff", "-r", str(NIX), str(regenerated)],
+                                    capture_output=True, text=True)
+            if result.returncode == 0:
+                print(f"nix/ matches upstream {ref} plus the port")
+                return 0
+            print(result.stdout, file=sys.stderr)
+            print(f"nix/ has drifted from upstream {ref} plus the port", file=sys.stderr)
+            return 1
+
+        shutil.rmtree(NIX)
+        shutil.copytree(regenerated, NIX)
+        print(f"regenerated nix/ from upstream {ref} plus {PATCH.name}")
+        print("run tools/regenerate-nix-fork --check to confirm, and review the result")
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

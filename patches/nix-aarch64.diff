@@ -1,0 +1,416 @@
+# AArch64 port of upstream's Nix packaging.
+#
+# Purely a record for review: the fork is applied by being committed under
+# nix/, not by being patched at flake evaluation time. Nix cannot apply a patch
+# during a pure evaluation, so the vendored copy is the mechanism and this file
+# is the description of what changed.
+#
+# Regenerate with tools/regenerate-nix-fork, which re-extracts upstream nix/ and
+# re-applies it. The CI check does the same and fails on any difference.
+#
+# Upstream v0.5.0, commit c56aa2d6e8d70bd87b279e4edd70588c7ec15a6d.
+#
+# Three groups of change:
+#   1. denialSource, because the fork no longer sits beside upstream's tree, so
+#      ../prebuilt, ../compositor and ../native_app are passed in as an argument
+#      instead. overlay.nix publishes it as a package set attribute, which is
+#      how callPackage hands it to every file that declares it.
+#   2. The dart and engine source hash tables gain an aarch64-linux key, and the
+#      Dart archive name follows the target. Upstream keys these by system with
+#      a throw as the fallback, so packages.aarch64-linux did not exist rather
+#      than failing to build.
+#   3. meta.platforms gains aarch64-linux. These are enforced on derivations
+#      built by callPackage inside package.nix's own let, which was confirmed on
+#      an AArch64 runner rather than assumed.
+
+diff --git a/nix/compositor.nix
+--- a/nix/compositor.nix	2026-10-13 17:54:57.826511353 +0800
++++ b/nix/compositor.nix	2026-10-13 17:56:06.434511327 +0800
+@@ -1,5 +1,6 @@
+ {
+   lib,
++  denialSource,
+   rustPlatform,
+   coreutils,
+   pkg-config,
+@@ -31,7 +32,7 @@
+     # filtered store path that is materialized for the build, and recent Nix
+     # versions do not guarantee that it exists while import-cargo-lock reads
+     # the lock file during evaluation.
+-    lockFile = ../compositor/Cargo.lock;
++    lockFile = ${denialSource}/compositor/Cargo.lock;
+     outputHashes = {
+       "smithay-0.7.0" = "sha256-Dov9wh6qGuciLMTwOXM/eRA/Uo4jSvhcCqwJFdB2Vbg=";
+       "smithay-drm-extras-0.1.0" = "sha256-Dov9wh6qGuciLMTwOXM/eRA/Uo4jSvhcCqwJFdB2Vbg=";
+@@ -94,6 +95,6 @@
+     description = "Native compositor and portal processes for Denial";
+     homepage = "https://github.com/denialwm/denial";
+     license = lib.licenses.gpl3Plus;
+-    platforms = [ "x86_64-linux" ];
++    platforms = [ "x86_64-linux" "aarch64-linux" ];
+   };
+ }
+diff --git a/nix/dart-shell.nix
+--- a/nix/dart-shell.nix	2026-10-13 17:54:57.826511353 +0800
++++ b/nix/dart-shell.nix	2026-10-13 17:56:06.434511327 +0800
+@@ -77,6 +77,6 @@
+     description = "Embedded Flutter desktop shell for Denial";
+     homepage = "https://github.com/denialwm/denial";
+     license = lib.licenses.gpl3Plus;
+-    platforms = [ "x86_64-linux" ];
++    platforms = [ "x86_64-linux" "aarch64-linux" ];
+   };
+ }
+diff --git a/nix/experiments/portable-engine.nix
+--- a/nix/experiments/portable-engine.nix	2026-10-13 17:54:57.826511353 +0800
++++ b/nix/experiments/portable-engine.nix	2026-10-13 17:56:06.438511327 +0800
+@@ -2,12 +2,13 @@
+ # This does not change the module default or authorize unverified engine inputs.
+ {
+   pkgs,
++  denialSource,
+   engineRoot,
+   bundle,
+   embedderHeader,
+   expectedEngineSha256,
+   dartSdk ? null,
+-  sourceLock ? ../../prebuilt/flutter-engine/SOURCE_LOCK.json,
++  sourceLock ? denialSource + "/prebuilt/flutter-engine/SOURCE_LOCK.json",
+ }:
+ let
+   rawEngine = builtins.path {
+@@ -59,7 +60,7 @@
+       outName = "host_release";
+       isOptimized = true;
+     };
+-    meta.platforms = [ "x86_64-linux" ];
++    meta.platforms = [ "x86_64-linux" "aarch64-linux" ];
+   };
+   runtime = pkgs.runCommand "denial-portable-runtime-experiment" { } ''
+     cp -R ${rawBundle} $out
+diff --git a/nix/flutter-engine-adapt.nix
+--- a/nix/flutter-engine-adapt.nix	2026-10-13 17:54:57.826511353 +0800
++++ b/nix/flutter-engine-adapt.nix	2026-10-13 17:58:07.282511281 +0800
+@@ -1,6 +1,7 @@
+ # Small host-specific build. The raw input remains identical across Nixpkgs hosts.
+ {
+   lib,
++  denialSource,
+   stdenvNoCC,
+   autoPatchelfHook,
+   patchelf,
+@@ -31,7 +32,7 @@
+   installPhase = ''
+     runHook preInstall
+     python3 ${./engine-manifest.py} verify . \
+-      --source-lock ${../prebuilt/flutter-engine/SOURCE_LOCK.json} \
++      --source-lock ${denialSource}/prebuilt/flutter-engine/SOURCE_LOCK.json} \
+       --nix-lock ${./flutter-engine-lock.json} --platform ${stdenv.hostPlatform.system} \
+       --minimum-glibc ${rawEngine.minimumGlibc} \
+       --minimum-compiler-runtime ${rawEngine.minimumCompilerRuntime} \
+@@ -56,7 +57,7 @@
+           version = rawEngine.sourceEngine.dartSdkVersion;
+           meta = {
+             mainProgram = "dart";
+-            platforms = [ "x86_64-linux" ];
++            platforms = [ "x86_64-linux" "aarch64-linux" ];
+           };
+         }
+         ''
+@@ -64,5 +65,5 @@
+         '';
+     release = finalAttrs.finalPackage;
+   };
+-  meta.platforms = [ "x86_64-linux" ];
++  meta.platforms = [ "x86_64-linux" "aarch64-linux" ];
+ })
+diff --git a/nix/flutter-engine-lock.json
+--- a/nix/flutter-engine-lock.json	2026-10-13 17:54:57.826511353 +0800
++++ b/nix/flutter-engine-lock.json	2026-10-13 17:56:01.354511329 +0800
+@@ -14,11 +14,13 @@
+   },
+   "engine": {
+     "revision": "af7e796e161ae0bb1ff0758c71a7105418bd9ded",
+-    "source_hash": "sha256-h7Rond9nStRszAWdelg9PvU5uU9oQO0gnkFBPv9f1To="
++    "source_hash": "sha256-h7Rond9nStRszAWdelg9PvU5uU9oQO0gnkFBPv9f1To=",
++    "source_hash_aarch64": "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+   },
+   "dart": {
+     "version": "3.13.4",
+-    "hash": "sha256-ZIehDfXquJDXRtFKVfTHC+w8HAYz9RgE61BMvA/Dlbs="
++    "hash": "sha256-ZIehDfXquJDXRtFKVfTHC+w8HAYz9RgE61BMvA/Dlbs=",
++    "hash_aarch64": "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+   },
+   "swiftshader": {
+     "revision": "794b0cfce1d828d187637e6d932bae484fbe0976",
+diff --git a/nix/flutter-engine-raw.nix
+--- a/nix/flutter-engine-raw.nix	2026-10-13 17:54:57.826511353 +0800
++++ b/nix/flutter-engine-raw.nix	2026-10-13 17:58:07.282511281 +0800
+@@ -1,6 +1,7 @@
+ # Host-independent, source-built engine and compiler assets for the binary cache.
+ {
+   lib,
++  denialSource,
+   pkgs,
+   runCommand,
+   python3,
+@@ -12,7 +13,7 @@
+   sourceEngine = pkgs.callPackage ./flutter-engine-source.nix { inherit flutterNixpkgs; };
+   minimumGlibc = lib.versions.majorMinor pkgs.stdenv.cc.libc.version;
+   minimumCompilerRuntime = lib.versions.majorMinor pkgs.stdenv.cc.cc.version;
+-  sourceLockSha256 = builtins.hashFile "sha256" ../prebuilt/flutter-engine/SOURCE_LOCK.json;
++  sourceLockSha256 = builtins.hashFile "sha256" ${denialSource}/prebuilt/flutter-engine/SOURCE_LOCK.json;
+ in
+ runCommand "denial-flutter-engine-raw-${sourceEngine.version}"
+   {
+@@ -36,7 +37,7 @@
+         ;
+       producerNixpkgsVersion = lib.version;
+     };
+-    meta.platforms = [ "x86_64-linux" ];
++    meta.platforms = [ "x86_64-linux" "aarch64-linux" ];
+   }
+   ''
+     mkdir -p $out/out/host_release $out/licenses
+@@ -49,8 +50,8 @@
+     done
+     cp ${sourceEngine.src}/src/flutter/shell/platform/embedder/embedder.h \
+       $out/out/host_release/flutter_embedder.h
+-    cp ${../prebuilt/flutter-engine/linux-x64-release/LICENSE.flutter} $out/licenses/LICENSE.flutter
+-    cp ${../prebuilt/flutter-engine/linux-x64-release/LICENSE.third_party} $out/licenses/LICENSE.third_party
++    cp ${denialSource}/prebuilt/flutter-engine/linux-x64-release/LICENSE.flutter} $out/licenses/LICENSE.flutter
++    cp ${denialSource}/prebuilt/flutter-engine/linux-x64-release/LICENSE.third_party} $out/licenses/LICENSE.third_party
+     chmod -R u+w $out
+     # Neutralize the producer's loader/search paths on copies. These binaries
+     # are build inputs, and must be adapted before execution on a NixOS host.
+@@ -75,7 +76,7 @@
+       fi
+     done < <(find $out -type f -print0)
+     python3 ${./engine-manifest.py} create "$out" \
+-      --source-lock ${../prebuilt/flutter-engine/SOURCE_LOCK.json} \
++      --source-lock ${denialSource}/prebuilt/flutter-engine/SOURCE_LOCK.json} \
+       --nix-lock ${./flutter-engine-lock.json} \
+       --configuration ${sourceEngine.release}/denial-args.gn \
+       --platform x86_64-linux --minimum-glibc ${minimumGlibc} \
+diff --git a/nix/flutter-engine-source.nix
+--- a/nix/flutter-engine-source.nix	2026-10-13 17:54:57.826511353 +0800
++++ b/nix/flutter-engine-source.nix	2026-10-13 17:55:53.722511332 +0800
+@@ -1,6 +1,7 @@
+ # Source builder shared by the pinned cache producer and host-source fallback.
+ {
+   lib,
++  denialSource,
+   pkgs,
+   stdenv,
+   fetchurl,
+@@ -8,19 +9,32 @@
+   maintenanceOnly ? false,
+ }:
+ let
+-  sourceLock = lib.importJSON ../prebuilt/flutter-engine/SOURCE_LOCK.json;
++  sourceLock = lib.importJSON ${denialSource}/prebuilt/flutter-engine/SOURCE_LOCK.json;
+   nixLock = lib.importJSON ./flutter-engine-lock.json;
+-  sourceLockHash = builtins.hashFile "sha256" ../prebuilt/flutter-engine/SOURCE_LOCK.json;
++  sourceLockHash = builtins.hashFile "sha256" ${denialSource}/prebuilt/flutter-engine/SOURCE_LOCK.json;
+   flutterVersion = "3.47.5";
+   flutterRevision = sourceLock.flutter.revision;
+   engineVersion = lib.removeSuffix "\n" (
+-    builtins.readFile ../prebuilt/flutter-engine/linux-x64-release/ENGINE_REVISION
++    builtins.readFile ${denialSource}/prebuilt/flutter-engine/linux-x64-release/ENGINE_REVISION
+   );
+   dartVersion = nixLock.dart.version;
+   flutterNix = flutterNixpkgs + "/pkgs/development/compilers/flutter";
++  # AArch64 port. Upstream keys these by system with a throw as the fallback,
++  # which is why packages.aarch64-linux did not exist rather than failing to
++  # build: there was no hash to put in the table.
+   dartHash =
+     {
+       x86_64-linux = nixLock.dart.hash;
++      aarch64-linux = nixLock.dart.hash_aarch64;
++    }
++    .${stdenv.hostPlatform.system}
++      or (throw "Denial Flutter does not support ${stdenv.hostPlatform.system}");
++
++  # The archive is named after the target, not the version.
++  dartArchive =
++    {
++      x86_64-linux = "dartsdk-linux-x64-release.zip";
++      aarch64-linux = "dartsdk-linux-arm64-release.zip";
+     }
+     .${stdenv.hostPlatform.system}
+       or (throw "Denial Flutter does not support ${stdenv.hostPlatform.system}");
+@@ -28,7 +42,7 @@
+   dart = pkgs.dart-bin.overrideAttrs (_: {
+     version = dartVersion;
+     src = fetchurl {
+-      url = "https://storage.googleapis.com/dart-archive/channels/stable/release/${dartVersion}/sdk/dartsdk-linux-x64-release.zip";
++      url = "https://storage.googleapis.com/dart-archive/channels/stable/release/${dartVersion}/sdk/${dartArchive}";
+       hash = dartHash;
+     };
+   });
+@@ -94,6 +108,7 @@
+     version = engineVersion;
+     hashes = {
+       x86_64-linux.x86_64-linux = nixLock.engine.source_hash;
++      aarch64-linux.aarch64-linux = nixLock.engine.source_hash_aarch64;
+     };
+     url = "${sourceLock.flutter.repository}@${flutterRevision}";
+     patches = [ ];
+diff --git a/nix/flutter-engine.nix
+--- a/nix/flutter-engine.nix	2026-10-13 17:54:57.826511353 +0800
++++ b/nix/flutter-engine.nix	2026-10-13 17:55:53.722511332 +0800
+@@ -1,5 +1,6 @@
+ {
+   lib,
++  denialSource,
+   pkgs,
+   stdenv,
+   fetchFromGitHub,
+@@ -14,19 +15,32 @@
+ }:
+ 
+ let
+-  sourceLock = lib.importJSON ../prebuilt/flutter-engine/SOURCE_LOCK.json;
++  sourceLock = lib.importJSON ${denialSource}/prebuilt/flutter-engine/SOURCE_LOCK.json;
+   nixLock = lib.importJSON ./flutter-engine-lock.json;
+-  sourceLockHash = builtins.hashFile "sha256" ../prebuilt/flutter-engine/SOURCE_LOCK.json;
++  sourceLockHash = builtins.hashFile "sha256" ${denialSource}/prebuilt/flutter-engine/SOURCE_LOCK.json;
+   flutterVersion = "3.47.5";
+   flutterRevision = sourceLock.flutter.revision;
+   engineVersion = lib.removeSuffix "\n" (
+-    builtins.readFile ../prebuilt/flutter-engine/linux-x64-release/ENGINE_REVISION
++    builtins.readFile ${denialSource}/prebuilt/flutter-engine/linux-x64-release/ENGINE_REVISION
+   );
+   dartVersion = nixLock.dart.version;
+ 
++  # AArch64 port. Upstream keys these by system with a throw as the fallback,
++  # which is why packages.aarch64-linux did not exist rather than failing to
++  # build: there was no hash to put in the table.
+   dartHash =
+     {
+       x86_64-linux = nixLock.dart.hash;
++      aarch64-linux = nixLock.dart.hash_aarch64;
++    }
++    .${stdenv.hostPlatform.system}
++      or (throw "Denial Flutter does not support ${stdenv.hostPlatform.system}");
++
++  # The archive is named after the target, not the version.
++  dartArchive =
++    {
++      x86_64-linux = "dartsdk-linux-x64-release.zip";
++      aarch64-linux = "dartsdk-linux-arm64-release.zip";
+     }
+     .${stdenv.hostPlatform.system}
+       or (throw "Denial Flutter does not support ${stdenv.hostPlatform.system}");
+@@ -34,7 +48,7 @@
+   bootstrapDart = pkgs.dart-bin.overrideAttrs (_: {
+     version = dartVersion;
+     src = fetchurl {
+-      url = "https://storage.googleapis.com/dart-archive/channels/stable/release/${dartVersion}/sdk/dartsdk-linux-x64-release.zip";
++      url = "https://storage.googleapis.com/dart-archive/channels/stable/release/${dartVersion}/sdk/${dartArchive}";
+       hash = dartHash;
+     };
+   });
+diff --git a/nix/native-app.nix
+--- a/nix/native-app.nix	2026-10-13 17:54:57.826511353 +0800
++++ b/nix/native-app.nix	2026-10-13 17:56:06.438511327 +0800
+@@ -1,16 +1,16 @@
+-{ lib, rustPlatform, pkg-config, wayland, libglvnd, libxkbcommon, src }:
++{ lib, denialSource, rustPlatform, pkg-config, wayland, libglvnd, libxkbcommon, src }:
+ rustPlatform.buildRustPackage {
+   pname = "denial-native-app";
+   version = "0.0.0";
+   inherit src;
+   sourceRoot = "source/native_app";
+-  cargoLock.lockFile = ../native_app/Cargo.lock;
++  cargoLock.lockFile = ${denialSource}/native_app/Cargo.lock;
+   nativeBuildInputs = [ pkg-config ];
+   buildInputs = [ wayland libglvnd libxkbcommon ];
+   doCheck = true;
+   meta = {
+     description = "Native Wayland runner for Denial Flutter applications";
+     license = lib.licenses.bsd3;
+-    platforms = [ "x86_64-linux" ];
++    platforms = [ "x86_64-linux" "aarch64-linux" ];
+   };
+ }
+diff --git a/nix/native-flutter-app.nix
+--- a/nix/native-flutter-app.nix	2026-10-13 17:54:57.826511353 +0800
++++ b/nix/native-flutter-app.nix	2026-10-13 17:56:06.438511327 +0800
+@@ -39,6 +39,6 @@
+   meta = {
+     description = "Native Flutter ${name} application";
+     license = lib.licenses.gpl3Plus;
+-    platforms = [ "x86_64-linux" ];
++    platforms = [ "x86_64-linux" "aarch64-linux" ];
+   };
+ }
+diff --git a/nix/overlay.nix
+--- a/nix/overlay.nix	2026-10-13 17:54:57.826511353 +0800
++++ b/nix/overlay.nix	2026-10-13 17:55:07.418511350 +0800
+@@ -1,5 +1,10 @@
+ {
+-  src ? ../.,
++  # AArch64 port: the fork of this directory no longer sits beside upstream's
++  # source tree, so the paths its files reach for are passed in rather than
++  # resolved as ../. denialSource is also published as a package set attribute,
++  # which is how callPackage hands it to every file that declares it.
++  denialSource,
++  src ? denialSource,
+   version ? "0.0.0+unknown",
+   buildIdentity ? "nix.unknown",
+   sourceRevision ? "unknown",
+@@ -32,6 +37,8 @@
+   };
+ in
+ {
++  inherit denialSource;
++
+   denialFlutter = final.callPackage ./flutter-engine.nix (
+     final.lib.optionalAttrs (flutterNixpkgs != null) { inherit flutterNixpkgs; }
+   );
+diff --git a/nix/package.nix
+--- a/nix/package.nix	2026-10-13 17:54:57.826511353 +0800
++++ b/nix/package.nix	2026-10-13 17:56:06.438511327 +0800
+@@ -402,6 +402,6 @@
+       ofl
+     ];
+     mainProgram = "denial-session";
+-    platforms = [ "x86_64-linux" ];
++    platforms = [ "x86_64-linux" "aarch64-linux" ];
+   };
+ })
+diff --git a/nix/plugin-manager-backend.nix
+--- a/nix/plugin-manager-backend.nix	2026-10-13 17:54:57.826511353 +0800
++++ b/nix/plugin-manager-backend.nix	2026-10-13 17:56:06.438511327 +0800
+@@ -52,6 +52,6 @@
+   meta = {
+     description = "Build-time plugin composition manager for Denial";
+     license = lib.licenses.gpl3Plus;
+-    platforms = [ "x86_64-linux" ];
++    platforms = [ "x86_64-linux" "aarch64-linux" ];
+   };
+ }
+diff --git a/nix/plugin-manager-package.nix
+--- a/nix/plugin-manager-package.nix	2026-10-13 17:54:57.826511353 +0800
++++ b/nix/plugin-manager-package.nix	2026-10-13 17:56:06.438511327 +0800
+@@ -57,6 +57,6 @@
+     homepage = "https://github.com/denialwm/denial";
+     license = lib.licenses.gpl3Plus;
+     mainProgram = "denial-plugin-manager";
+-    platforms = [ "x86_64-linux" ];
++    platforms = [ "x86_64-linux" "aarch64-linux" ];
+   };
+ }
+diff --git a/nix/tests/engine-cache.nix
+--- a/nix/tests/engine-cache.nix	2026-10-13 17:54:57.826511353 +0800
++++ b/nix/tests/engine-cache.nix	2026-10-13 17:58:07.282511281 +0800
+@@ -32,7 +32,7 @@
+   }
+   ''
+     python3 ${../engine-manifest.py} verify ${raw} \
+-      --source-lock ${../../prebuilt/flutter-engine/SOURCE_LOCK.json} \
++      --source-lock ${denialSource}/prebuilt/flutter-engine/SOURCE_LOCK.json} \
+       --nix-lock ${../flutter-engine-lock.json} --platform ${pkgs.stdenv.hostPlatform.system}
+     ${probe}/bin/denial-engine-probe \
+       ${engine}/out/host_release/libflutter_engine.so \

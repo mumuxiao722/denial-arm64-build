@@ -70,6 +70,9 @@ jobs:
         env:
           DENIAL_REF: ${{ vars.DENIAL_REF }}
 
+      - name: The fork still matches upstream plus the port
+        run: tools/regenerate-nix-fork --check
+
       - name: flake check
         # checks.nixos-toplevel builds config.system.build.toplevel, which is
         # the Rust compositor plus the Flutter applications. The engine itself
