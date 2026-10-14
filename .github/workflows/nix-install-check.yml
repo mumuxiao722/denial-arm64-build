@@ -127,13 +127,21 @@ jobs:
             check "$path" "package/$path" package
           done
 
-          # The module owns exactly one entry in the system /etc: the portal
-          # config, which xdg.portal writes. The two .conf files are not there
-          # and never were -- NixOS does not merge a package's $out/etc into the
-          # system, and upstream's packaging/nixos/README.md documents them as
-          # machine specific input a host may point at its own copies.
-          check etc/xdg/xdg-desktop-portal-wlr/Denial \
-            result/etc/xdg/xdg-desktop-portal-wlr/Denial system
+          # The module owns exactly one entry in the system /etc. nixpkgs writes
+          # xdg.portal.config.<name> to
+          # /etc/xdg/xdg-desktop-portal/<name>-portals.conf, which is also how
+          # it learns that denial in extraPortals is a portal at all.
+          #
+          # Not the file the package installs. package.nix puts its
+          # xdg-desktop-portal-wlr/Denial in $out/etc, and NixOS does not merge
+          # a package's $out/etc into the system, so that copy is never read on
+          # NixOS -- the module expresses the same chooser through
+          # xdg.portal.wlr.settings, which the portal takes as --config= rather
+          # than from /etc. The two .conf files are in the same position, and
+          # upstream's packaging/nixos/README.md gives them as machine specific
+          # input a host may point at its own copies.
+          check etc/xdg/xdg-desktop-portal/denial-portals.conf \
+            result/etc/xdg/xdg-desktop-portal/denial-portals.conf system
 
           [ "$fail" -eq 0 ] || exit 1
 
@@ -198,7 +206,7 @@ jobs:
         with:
           name: install-check-listing
           path: |
-            result/etc/xdg/xdg-desktop-portal-wlr/Denial
+            result/etc/xdg/xdg-desktop-portal/denial-portals.conf
             package/etc/denial
             package/lib/denial/flutter/lib
           if-no-files-found: error
