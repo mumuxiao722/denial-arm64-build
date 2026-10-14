@@ -172,6 +172,20 @@ Denial `v0.5.0`，并另有一个 `plugins` 输入。上游那份仅在 `x86_64-
 }
 ```
 
+添加二进制缓存：
+
+```nix
+{
+  nix.settings.substituters = [ "https://denial-arm64.cachix.org" ];
+  nix.settings.trusted-public-keys = [
+    "denial-arm64.cachix.org-1:FMxOqIH4Q1UX/sxmZxspx73o68MLKSd48ajvBjYIA0A="
+  ];
+}
+```
+
+不要添加 `denial.cachix.org`：它不是 AArch64 缓存，一个永远命不中的 substituter 只会在
+每个路径上多一次查询。
+
 ### 在非 NixOS 上使用 Nix 包管理器及 Flake
 
 在 Nix 配置中声明 flake 输入。该 overlay 提供 `denial` 与 `denialPluginManager`：
@@ -198,12 +212,6 @@ Denial `v0.5.0`，并另有一个 `plugins` 输入。上游那份仅在 `x86_64-
     };
 }
 ```
-
-### 构建开销
-
-AArch64 的引擎不在 `denial.cachix.org` 上：该缓存保存的是上游的 x86_64 产物，而不同架构
-对应不同的 store 路径，因此没有任何缓存条目适用，也不需要额外配置。其代价是首次构建
-需要从源码编译引擎，耗时数小时。
 
 ## 许可证
 

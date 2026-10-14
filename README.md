@@ -189,6 +189,20 @@ configuration:
 }
 ```
 
+Add the binary cache:
+
+```nix
+{
+  nix.settings.substituters = [ "https://denial-arm64.cachix.org" ];
+  nix.settings.trusted-public-keys = [
+    "denial-arm64.cachix.org-1:FMxOqIH4Q1UX/sxmZxspx73o68MLKSd48ajvBjYIA0A="
+  ];
+}
+```
+
+Leave `denial.cachix.org` out: it is not an AArch64 cache, and a substituter
+that can only miss costs a lookup on every path.
+
 ### On non-NixOS with the Nix package manager
 
 Declare the flake input in the Nix configuration. The overlay provides
@@ -216,14 +230,6 @@ Declare the flake input in the Nix configuration. The overlay provides
     };
 }
 ```
-
-### Build cost
-
-The engine is not on `denial.cachix.org` for AArch64: that cache carries
-upstream's x86_64 output, and a different architecture is a different store
-path, so no cache entry applies and no configuration is needed. The consequence
-is that the engine is compiled from source on the first build, and building from
-source takes hours.
 
 ## License
 
