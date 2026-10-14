@@ -182,22 +182,28 @@ jobs:
           readelf -h package/lib/denial/flutter/lib/libflutter_engine.so \
             | grep 'AArch64'
 
-          # Run 38613495890 showed ldd is on the runner and resolved all four.
-          # The marker has to be the loader's own "=> not found", because the
-          # words "not found" also appear in "ldd: command not found".
+          # Matched with case rather than grepped through a pipe. grep -q exits
+          # at the first match, the writer on the other end takes SIGPIPE, and
+          # pipefail turns that signal into the pipeline's status -- which is
+          # how run 38614016680 reported a package as absent from a closure it
+          # was printed in. Nothing here depends on how much is piped.
           load_fail=0
           loads() {
             libs=$(ldd "$1" 2>&1 || true)
-            if printf '%s' "$libs" | grep -q '=> not found'; then
-              echo "::error::$1 has unresolved shared libraries"
-              printf '%s\n' "$libs" | grep '=> not found' | head -5
-              load_fail=1
-            elif printf '%s' "$libs" | grep -q 'not a dynamic executable'; then
-              echo "::error::$1 is not a loadable ELF"
-              load_fail=1
-            else
-              echo "  ok  $1 resolves every shared library it asks for"
-            fi
+            case "$libs" in
+              *'=> not found'*)
+                echo "::error::$1 has unresolved shared libraries"
+                printf '%s\n' "$libs" | grep '=> not found' | head -5 || true
+                load_fail=1
+                ;;
+              *'not a dynamic executable'*)
+                echo "::error::$1 is not a loadable ELF"
+                load_fail=1
+                ;;
+              *)
+                echo "  ok  $1 resolves every shared library it asks for"
+                ;;
+            esac
           }
 
           loads package/bin/deniald
@@ -254,11 +260,11 @@ jobs:
           # the binaries -- without walking 1600 paths to rediscover what the
           # store path already implies.
           package_path=$(readlink -f package)
-          if printf '%s\n' "$closure" | grep -qxF "$package_path"; then
+          if printf '%s\n' "$closure" | grep -xF "$package_path" >/dev/null; then
             echo "  ok  the installed system contains $(basename "$package_path")"
           else
             echo "::error::$package_path is not in the installed system closure"
-            printf '%s\n' "$closure" | grep -i denial | head -20
+            printf '%s\n' "$closure" | grep -i denial | head -20 || true
             fail=1
           fi
 
