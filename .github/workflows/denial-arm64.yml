@@ -9,6 +9,10 @@ name: Build Denial (ARM64)
 on:
   workflow_dispatch:
     inputs:
+      denial_ref:
+        description: 'Denial release to build'
+        type: string
+        required: true
       publish_release:
         description: 'Publish a GitHub release with the packages'
         type: boolean
@@ -21,16 +25,19 @@ on:
   #   paths:
   #     - 'patches/**'
 
-# This repository tracks one Denial tag at a time. It is a repository variable
-# rather than a top-level env entry because these values are needed inside step
-# `with:` blocks -- ref and cache keys -- and the env context is not available
-# there.
+# This repository tracks one Denial tag at a time, and the run names it. It used
+# to be a repository variable, which meant an upgrade could only be tested by
+# changing shared state that main also read, so a branch under test left main
+# unable to build. Making it an input gives each run its own answer.
 #
-#   gh variable set DENIAL_REF --body v0.6.0
+#   gh workflow run denial-arm64.yml -f denial_ref=v0.5.0
+#
+# The value is written where env is not available: the ref and cache key live
+# inside step `with:` blocks.
 
 jobs:
   build:
-    name: "Build (${{ vars.DENIAL_REF }}, ARM64)"
+    name: "Build (${{ inputs.denial_ref }}, ARM64)"
     runs-on: ubuntu-24.04-arm
 
     outputs:
@@ -51,11 +58,11 @@ jobs:
       - name: "Checkout Repo"
         uses: actions/checkout@v7
 
-      - name: "Checkout Denial (${{ vars.DENIAL_REF }})"
+      - name: "Checkout Denial (${{ inputs.denial_ref }})"
         uses: actions/checkout@v7
         with:
           repository: denialwm/denial
-          ref: ${{ vars.DENIAL_REF }}
+          ref: ${{ inputs.denial_ref }}
           path: denial
           fetch-depth: 0
           fetch-tags: true
@@ -67,9 +74,9 @@ jobs:
           path: |
             ${{ github.workspace }}/.denial-cache/engine/artifacts
             ${{ github.workspace }}/.denial-cache/engine/state
-          key: denial-engine-cache-${{ vars.DENIAL_REF }}
+          key: denial-engine-cache-${{ inputs.denial_ref }}
           restore-keys: |
-            denial-engine-cache-${{ vars.DENIAL_REF }}
+            denial-engine-cache-${{ inputs.denial_ref }}
 
       # The build toolchain. bsdtar is here rather than in the Arch step
       # because package-denial-rpm, package-denial-apk and package-denial-arch
@@ -514,6 +521,6 @@ jobs:
       - name: "Publish GitHub release"
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ vars.DENIAL_REF }}
+          tag_name: ${{ inputs.denial_ref }}
           prerelease: true
           files: packages/*

@@ -18,11 +18,9 @@ ARM64 设备上，在满足上游宿主要求的前提下，使用该补丁集�
 
 ## 状态
 
-当前跟踪的 Denial 版本：`v0.5.0`
+Denial 版本：`v0.5.0`
 
-被跟踪的版本保存在仓库变量 `DENIAL_REF` 中，上面的值是它当前的设置。
-
-被跟踪版本的安装包发布在
+安装包发布在
 [Releases 页面](https://github.com/mumuxiao722/denial-arm64-builder/releases)。
 
 ## 安装
@@ -104,17 +102,23 @@ Denial 无法在 Alpine 上编译，但可在 Alpine 这样的 musl 系统上运
 
 ## GitHub Actions 构建
 
-工作流构建的 Denial 版本由 `DENIAL_REF` 指定。
+工作流构建的 Denial 版本由 `denial_ref` 指定。
 
-### 跟踪的 Denial 版本
+### Denial 版本
 
-工作流一次只跟踪一个 Denial tag。被跟踪的 ref 是仓库变量 `DENIAL_REF`：
+工作流每次运行构建一个 Denial tag，由 `denial_ref` 指定：
 
 ```sh
-gh variable set DENIAL_REF --body v0.5.0
+gh workflow run denial-arm64.yml -f denial_ref=v0.5.0
 ```
 
-所有缓存键均由它派生，因此切换到新版本会使引擎缓存自动失效，无需修改其他内容。
+所有缓存键均由它派生，因此换一个版本会从空的引擎缓存开始，无需修改其他内容。
+
+该字段用于在测试分支上验证新版本，而不改变 `main` 使用的 tag。不要用它改动默认版本：
+
+```sh
+gh workflow run denial-arm64.yml --ref bump-denial-<tag> -f denial_ref=<tag>
+```
 
 ### 产物与 release
 

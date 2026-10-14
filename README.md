@@ -22,12 +22,9 @@ fedora-sheng.
 
 ## Status
 
-Currently tracked Denial release: `v0.5.0`
+Denial release: `v0.5.0`
 
-The tracked version is held in the repository variable `DENIAL_REF`. The value
-above is its current setting.
-
-Packages for the tracked version are published on the
+Packages are published on the
 [Releases page](https://github.com/mumuxiao722/denial-arm64-builder/releases).
 
 ## Installing
@@ -117,19 +114,25 @@ against glibc, so on Alpine's musl it requires `gcompat` at runtime.
 
 ## GitHub Actions build
 
-The Denial version built by the workflow is the one named by `DENIAL_REF`.
+The Denial version built by the workflow is the one named by `denial_ref`.
 
-### Tracked Denial release
+### Denial release
 
-The workflow tracks one Denial tag at a time. The tracked ref is the repository
-variable `DENIAL_REF`:
+The workflow builds one Denial tag per run, named with `denial_ref`:
 
 ```sh
-gh variable set DENIAL_REF --body v0.5.0
+gh workflow run denial-arm64.yml -f denial_ref=v0.5.0
 ```
 
-Every cache key derives from it, so switching to another version invalidates the
-engine cache automatically. No other changes are required.
+Every cache key derives from it, so a different version starts from a cold
+engine cache. No other changes are required.
+
+This field is for testing a new version on a test branch without disturbing the
+tag `main` builds. Do not use it to change which version is the default:
+
+```sh
+gh workflow run denial-arm64.yml --ref bump-denial-<tag> -f denial_ref=<tag>
+```
 
 ### Artifacts and releases
 
