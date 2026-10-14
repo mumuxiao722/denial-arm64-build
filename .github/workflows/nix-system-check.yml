@@ -82,18 +82,30 @@ jobs:
           readelf -h package/lib/denial/flutter/lib/libflutter_engine.so \
             | grep --quiet 'AArch64'
 
-      # This is the half that is actually about the module: the session entry a
-      # display manager reads, the two configuration files the launcher treats
-      # as declarative input, and the portal the module wires up.
-      - name: Check what the module put in /etc
+      # The module owns exactly one entry in the system /etc: the portal
+      # config, which xdg.portal writes. The two .conf files are not there and
+      # never were -- NixOS does not merge a package's $out/etc into the system,
+      # and upstream's packaging/nixos/README.md documents them as machine
+      # specific input a host may point at its own copies. They are shipped in
+      # the package as the packaged defaults.
+      - name: Check the portal config the module wrote
+        run: |
+          set -euo pipefail
+          path=etc/xdg/xdg-desktop-portal-wlr/Denial
+          if [ ! -e "result/$path" ]; then
+            echo "::error::$path is missing from the system"
+            exit 1
+          fi
+          echo "  ok  $path"
+
+      - name: Check the configuration files the package ships
         run: |
           set -euo pipefail
           for path in \
             etc/denial/session.conf \
-            etc/denial/outputs.conf \
-            etc/xdg/xdg-desktop-portal-wlr/Denial; do
-            if [ ! -e "result/$path" ]; then
-              echo "::error::$path is missing from the system"
+            etc/denial/outputs.conf; do
+            if [ ! -e "package/$path" ]; then
+              echo "::error::$path is missing from the package"
               exit 1
             fi
             echo "  ok  $path"
@@ -108,7 +120,8 @@ jobs:
         with:
           name: install-check-listing
           path: |
-            result/etc/denial
+            result/etc/xdg/xdg-desktop-portal-wlr/Denial
+            package/etc/denial
             package/lib/denial/flutter/lib
           if-no-files-found: error
           retention-days: 7
