@@ -145,6 +145,16 @@ jobs:
 
           [ "$fail" -eq 0 ] || exit 1
 
+          # Existence only says a file appeared. checks.module asserts the values
+          # in it; that nixpkgs read xdg.portal.config.denial at all, and wrote
+          # the interface preference, is a separate thing only the build shows.
+          if grep -q '^preferred' result/etc/xdg/xdg-desktop-portal/denial-portals.conf; then
+            echo "  ok  denial-portals.conf names the preferred interfaces"
+          else
+            echo "::error::denial-portals.conf has no preferred= line"
+            exit 1
+          fi
+
           # Every existence check above would pass on a store path holding the
           # x86_64 engine. Its ELF header says otherwise, and nothing else in
           # this file catches it.
@@ -177,10 +187,18 @@ jobs:
           # implementation detail this file has not verified. Asserting
           # /run/current-system would fail for reasons that have nothing to do
           # with Denial.
-          check system-profile nix/var/nix/profiles/system
-          check system-link nix/var/nix/profiles/system-link
-          check gcroot nix/var/nix/gcroots/current-system
-          check static-etc etc/static
+          # Only what this repository's module puts in the system. The system
+          # profile, the profile link, the gcroot and /etc/static would pass on
+          # any NixOS install whatever Denial was set to; they show that nixpkgs
+          # activated, not that this module was wired up. Option values are
+          # already asserted by checks.module without paying for a build.
+          #
+          # The session entry is at sw/share/wayland-sessions because
+          # package.nix lists that directory in pathsToLink, which is what makes
+          # the package's own copy reachable from the system profile. The polkit
+          # unit is the module's own service.
+          check session-entry sw/share/wayland-sessions/denial.desktop
+          check polkit-unit etc/systemd/user/denial-polkit-agent.service
           check deniald sw/bin/deniald
           check engine sw/lib/denial/flutter/lib/libflutter_engine.so
 
@@ -198,7 +216,7 @@ jobs:
 
           [ "$fail" -eq 0 ] || exit 1
 
-          readlink -f "$target/nix/var/nix/profiles/system"
+          readlink -f "$target/sw/share/wayland-sessions/denial.desktop"
 
       - name: List etc contents
         run: |
