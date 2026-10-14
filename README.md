@@ -151,7 +151,7 @@ build requires, one for the Dart SDK and one for the engine source closure.
 |---|---|
 | `nixosModules.default` | The NixOS module, `programs.denial.enable` |
 | `overlays.default` | `denial`, `denialPluginManager`, and the engine |
-| `packages.<system>.trial-rootfs` | A minimal NixOS image, built only to be inspected |
+| `packages.<system>.trial-rootfs` | A minimal NixOS system, built to test the install |
 
 Two workflows are provided:
 
@@ -159,7 +159,7 @@ Two workflows are provided:
 |---|---|
 | Nix Flake Check | **Evaluate the flake on AArch64** |
 |  | **Resolve the AArch64 engine hashes** — only when `refresh_engine_hashes` is set. Blanks the two hashes and resolves them again, reporting what Nix prints as `got:`. |
-| NixOS Image Check | **Build a minimal NixOS image and check that nixos-install or nixos-switch can install Denial** |
+| Nix Install Check | **Install a system to test whether Denial can be installed** |
 
 ### On NixOS
 

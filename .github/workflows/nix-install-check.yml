@@ -1,0 +1,205 @@
+name: Nix Install Check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nix-install-check-${{ github.ref }}
+  cancel-in-progress: false
+
+# Deliberately not a check. denial.cachix.org carries only the x86_64 engine, so
+# an AArch64 build compiles the Flutter engine from source and runs for hours.
+# Nothing here is automatic: it runs when someone wants to know whether a real
+# machine can install this, not on every push.
+#
+# nixos-install is run for real, against a tmpfs directory on this runner, rather
+# than simulated. It copies the closure in and chroots to run
+# switch-to-configuration boot itself, so the activation is what actually
+# happens here, not a rehearsal of it.
+#
+# The chroot is not optional and is not something this file does by hand. The
+# activation script hard-codes its paths -- it creates /run/current-system at an
+# absolute location -- so running the activation outside a chroot would write to
+# the runner's Ubuntu root instead of the target.
+#
+# What stays unreachable is /run/booted-system, which only a real boot creates.
+# Nothing boots: the runner is Ubuntu, and the target has no bootloader because
+# the system has none configured.
+#
+# The target is not a deliverable. Nothing ships it, nobody uses it, and it is
+# deliberately missing a display manager -- one would try to start denial, and
+# whether the compositor runs is upstream's business, since nothing here touches
+# its source.
+jobs:
+  build:
+    name: Install a system to test whether Denial can be installed
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+        name: Check out this repository
+
+      # No denial.cachix.org here on purpose. That cache carries upstream's
+      # x86_64 engine and nothing else; a run on this runner substituted 1583
+      # paths from cache.nixos.org and none from it. Registering it would cost a
+      # trusted key and imply a cache that does not exist for this architecture.
+      - uses: cachix/install-nix-action@v31
+        name: Install Nix
+
+      # One build, and the image is what gets built first. trial-rootfs pulls the
+      # package in: the module puts it in environment.systemPackages and a
+      # toplevel closes over systemPackages, so Nix has to build it either way.
+      # The second command builds nothing -- the path is in the store by then --
+      # it just writes the package symlink the checks need, because inside a
+      # toplevel /bin and /lib are symlinks into the store, not a merged tree.
+      #
+      # --print-build-logs streams every derivation's full log. Without it a
+      # failure only reports its last 25 lines, which on a Rust build are
+      # warnings and hide the errors above them.
+      - name: Build image and package
+        run: |
+          nix build .#trial-rootfs -o result --accept-flake-config --show-trace \
+            --print-build-logs --keep-failed
+          nix build .#denial -o package
+
+      # nixos-install has to mount /proc, /dev and /run inside the target before
+      # it can chroot, so the target has to be a mount point. tmpfs rather than a
+      # loop-mounted ext4 image: the closure is large, and the filesystem under
+      # the target is not the thing under test here -- the activation is.
+      - name: Install into a target directory
+        run: |
+          set -euo pipefail
+          target=/mnt/nixos
+          sudo mkdir -p "$target"
+          sudo mount -t tmpfs -o size=12G tmpfs "$target"
+
+          # The closure is what gets installed, so this is the tool that has to
+          # run. It is not necessarily on the system PATH -- our systemPackages
+          # is denial and zenity -- so look for it before failing, and print the
+          # help if it is missing so the log says what the options are instead of
+          # leaving the next person to guess.
+          installer=""
+          for candidate in result/sw/bin/nixos-install result/bin/nixos-install; do
+            if [ -x "$candidate" ]; then
+              installer="$candidate"
+              break
+            fi
+          done
+          if [ -z "$installer" ]; then
+            echo "::error::nixos-install is not in the closure under either path"
+            ls result result/sw/bin 2>/dev/null | head -40
+            exit 1
+          fi
+          echo "using $installer"
+          "$installer" --help || true
+
+          sudo "$installer" \
+            --root "$target" \
+            --system "$(readlink -f result)" \
+            --no-root-passwd --no-channel --no-boot-loader
+
+      - name: Verify build outputs
+        run: |
+          set -euo pipefail
+          fail=0
+          check() {
+            if [ -e "$2" ]; then
+              echo "  ok  $1"
+            else
+              echo "::error::$1 is missing from $3"
+              fail=1
+            fi
+          }
+
+          # Checked on the package rather than the system: inside a toplevel
+          # /bin and /lib are symlinks into the store, not a merged tree.
+          for path in \
+            bin/deniald \
+            bin/denialctl \
+            bin/denial-portal \
+            bin/denial-session \
+            bin/denial-settings \
+            lib/denial/flutter/lib/libflutter_engine.so \
+            lib/denial/flutter/lib/libapp.so \
+            lib/denial/flutter/data/icudtl.dat; do
+            check "$path" "package/$path" package
+          done
+
+          # The module owns exactly one entry in the system /etc: the portal
+          # config, which xdg.portal writes. The two .conf files are not there
+          # and never were -- NixOS does not merge a package's $out/etc into the
+          # system, and upstream's packaging/nixos/README.md documents them as
+          # machine specific input a host may point at its own copies.
+          check etc/xdg/xdg-desktop-portal-wlr/Denial \
+            result/etc/xdg/xdg-desktop-portal-wlr/Denial system
+
+          [ "$fail" -eq 0 ] || exit 1
+
+          # Every existence check above would pass on a store path holding the
+          # x86_64 engine. Its ELF header says otherwise, and nothing else in
+          # this file catches it.
+          file package/lib/denial/flutter/lib/libflutter_engine.so
+          readelf -h package/lib/denial/flutter/lib/libflutter_engine.so \
+            | grep 'AArch64'
+
+      # This is the half only a real install can show. /run/current-system is
+      # created by switch-to-configuration, which nixos-install ran in the
+      # chroot above; the profile and the gcroot beside it come from the same
+      # activation. A closure that merely built would have none of them.
+      - name: Verify what the activation wrote
+        run: |
+          set -euo pipefail
+          fail=0
+          target=/mnt/nixos
+
+          check() {
+            if [ -e "$target/$2" ]; then
+              echo "  ok  $2"
+            else
+              echo "::error::$2 is missing from the installed system"
+              fail=1
+            fi
+          }
+
+          check current-system run/current-system
+          check system-profile nix/var/nix/profiles/system
+          check system-link nix/var/nix/profiles/system-link
+          check gcroot nix/var/nix/gcroots/current-system
+          check static-etc etc/static
+          check deniald sw/bin/deniald
+          check engine sw/lib/denial/flutter/lib/libflutter_engine.so
+
+          # Reported, not asserted. Only a real boot creates this one, and the
+          # runner cannot boot. If it ever shows up, the target was booted by
+          # something and these checks are measuring a system, not an install.
+          if [ -e "$target/run/booted-system" ]; then
+            echo "  !!  run/booted-system exists; this target was booted, not installed"
+          else
+            echo "  --  run/booted-system absent, as expected without a boot"
+          fi
+
+          [ "$fail" -eq 0 ] || exit 1
+
+          readlink -f "$target/run/current-system"
+
+      - name: List etc contents
+        run: |
+          find result/etc -maxdepth 3 | sort | head -40
+          find package/etc -maxdepth 3 | sort | head -40
+
+      - name: Clean up the target
+        if: always()
+        run: sudo umount /mnt/nixos || true
+
+      - uses: actions/upload-artifact@v7
+        name: Upload check artifacts
+        with:
+          name: install-check-listing
+          path: |
+            result/etc/xdg/xdg-desktop-portal-wlr/Denial
+            package/etc/denial
+            package/lib/denial/flutter/lib
+          if-no-files-found: error
+          retention-days: 7

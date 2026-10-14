@@ -133,7 +133,7 @@ Denial `v0.5.0`，并另有一个 `plugins` 输入。上游那份仅在 `x86_64-
 |---|---|
 | `nixosModules.default` | NixOS 模块，`programs.denial.enable` |
 | `overlays.default` | `denial`、`denialPluginManager`，以及引擎 |
-| `packages.<system>.trial-rootfs` | 一个最小 NixOS 镜像，仅为检查而构建 |
+| `packages.<system>.trial-rootfs` | 一个最小 NixOS 系统，用于测试安装 |
 
 提供两个工作流：
 
@@ -141,7 +141,7 @@ Denial `v0.5.0`，并另有一个 `plugins` 输入。上游那份仅在 `x86_64-
 |---|---|
 | Nix Flake Check | **在 AArch64 上评估 flake** |
 |  | **解析 AArch64 引擎哈希** —— 仅在设置 `refresh_engine_hashes` 时运行。清空两个哈希并重新解析，报告 Nix 输出的 `got:`。 |
-| NixOS Image Check | **构建最小 NixOS 镜像，检查 nixos-install 或 nixos-switch 能否安装 Denial** |
+| Nix Install Check | **安装系统以测试 Denial 能否被安装** |
 
 ### 在 NixOS 上使用 Flake
 
