@@ -170,11 +170,47 @@ jobs:
           fi
 
           # Every existence check above would pass on a store path holding the
-          # x86_64 engine. Its ELF header says otherwise, and nothing else in
-          # this file catches it.
-          file package/lib/denial/flutter/lib/libflutter_engine.so
+          # x86_64 engine. Its ELF header says otherwise, and an ELF header is
+          # all it says: a shared object that cannot be resolved is just as
+          # AArch64 as one that can. So the header is checked, and then the
+          # files are asked to resolve the libraries they ask for.
+          #
+          # The runner is aarch64, so ldd resolves them the way the loader
+          # would, RPATH included. denial-session is left out on purpose:
+          # package.nix builds it with wrapProgram, so it is a shell script and
+          # has no libraries to resolve.
           readelf -h package/lib/denial/flutter/lib/libflutter_engine.so \
             | grep 'AArch64'
+
+          # A missing ldd has to be an error rather than a silent pass, and the
+          # marker has to be the loader's own "=> not found": the words "not
+          # found" also appear in "ldd: command not found".
+          if ! command -v ldd >/dev/null; then
+            echo "::error::ldd is unavailable here, so linkage cannot be checked"
+            exit 1
+          fi
+
+          load_fail=0
+          loads() {
+            libs=$(ldd "$1" 2>&1 || true)
+            if printf '%s' "$libs" | grep -q '=> not found'; then
+              echo "::error::$1 has unresolved shared libraries"
+              printf '%s\n' "$libs" | grep '=> not found' | head -5
+              load_fail=1
+            elif printf '%s' "$libs" | grep -q 'not a dynamic executable'; then
+              echo "::error::$1 is not a loadable ELF"
+              load_fail=1
+            else
+              echo "  ok  $1 resolves every shared library it asks for"
+            fi
+          }
+
+          loads package/bin/deniald
+          loads package/bin/denialctl
+          loads package/bin/denial-portal
+          loads package/lib/denial/flutter/lib/libflutter_engine.so
+
+          [ "$load_fail" -eq 0 ] || exit 1
 
       # This is the half only a real install can show. /run/current-system is
       # created by switch-to-configuration, which nixos-install ran in the
