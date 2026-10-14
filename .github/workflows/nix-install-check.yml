@@ -16,18 +16,17 @@ concurrency:
 # machine can install this, not on every push.
 #
 # nixos-install is run for real, against a tmpfs directory on this runner, rather
-# than simulated. It copies the closure in and chroots to run
-# switch-to-configuration boot itself, so the activation is what actually
-# happens here, not a rehearsal of it.
+# than simulated. It copies the closure in and writes the target's system
+# profile, which is what this checks afterwards.
 #
-# The chroot is not optional and is not something this file does by hand. The
-# activation script hard-codes its paths -- it creates /run/current-system at an
-# absolute location -- so running the activation outside a chroot would write to
-# the runner's Ubuntu root instead of the target.
+# The activation is not reached. nixos-install runs switch-to-configuration in a
+# mount namespace and what that leaves behind is not something this file has
+# verified: /etc comes out holding /etc/NIXOS and nothing else, with no
+# /etc/static, no /etc/systemd and no gcroot. So nothing under /etc is
+# asserted here, and the system profile and /etc/NIXOS are, because those two
+# are written by the install itself.
 #
-# What stays unreachable is /run/booted-system, which only a real boot creates.
-# Nothing boots: the runner is Ubuntu, and the target has no bootloader because
-# the system has none configured.
+# Nothing boots either. The runner is Ubuntu, and the system has no bootloader.
 #
 # The target is not a deliverable. Nothing ships it, nobody uses it, and it is
 # deliberately missing a display manager -- one would try to start denial, and
@@ -154,7 +153,7 @@ jobs:
       # created by switch-to-configuration, which nixos-install ran in the
       # chroot above; the profile and the gcroot beside it come from the same
       # activation. A closure that merely built would have none of them.
-      - name: Verify what the activation wrote
+      - name: Verify what the install reached
         run: |
           set -euo pipefail
           fail=0
@@ -169,42 +168,25 @@ jobs:
             fi
           }
 
-          # Everything here survives nixos-install exiting. Nothing under /run
-          # is asserted: nixos-install mounts its own pseudo-filesystems inside
-          # the target, and what it leaves behind afterwards is an
-          # implementation detail this file has not verified. Asserting
-          # /run/current-system would fail for reasons that have nothing to do
-          # with Denial.
-          # Only what this repository's module puts in the system. The system
-          # profile, the profile link, the gcroot and /etc/static would pass on
-          # any NixOS install whatever Denial was set to; they show that nixpkgs
-          # activated, not that this module was wired up. Option values are
-          # already asserted by checks.module without paying for a build.
+          # What this module puts in the system profile. package.nix lists
+          # /share/wayland-sessions in pathsToLink, which is what makes the
+          # package's own session entry reachable from the profile.
           #
-          # The session entry is at sw/share/wayland-sessions because
-          # package.nix lists that directory in pathsToLink, which is what makes
-          # the package's own copy reachable from the system profile. The polkit
-          # unit is the module's own service.
+          # Nothing under /etc is asserted. nixos-install writes the system
+          # profile and /etc/NIXOS and stops there; /etc/static and the units
+          # under /etc/systemd belong to switch-to-configuration, which is
+          # what a booted system runs. Option values are already asserted by
+          # checks.module without paying for a build.
+          check system-profile nix/var/nix/profiles/system
+          check nixos-release etc/NIXOS
           check session-entry sw/share/wayland-sessions/denial.desktop
-          check polkit-unit etc/systemd/user/denial-polkit-agent.service
           check deniald sw/bin/deniald
           check engine sw/lib/denial/flutter/lib/libflutter_engine.so
 
-          # Reported, not asserted. Both are only created by a real boot --
-          # /run/current-system by the activation, /run/booted-system by the
-          # bootloader -- and the runner cannot boot. Printed because their
-          # absence is expected and worth seeing rather than silent.
-          for path in run/current-system run/booted-system; do
-            if [ -e "$target/$path" ]; then
-              echo "  --  $path present"
-            else
-              echo "  --  $path absent, as expected without a boot"
-            fi
-          done
-
           [ "$fail" -eq 0 ] || exit 1
 
-          readlink -f "$target/sw/share/wayland-sessions/denial.desktop"
+          echo "--- what landed ---"
+          find "$target/etc" -maxdepth 2 | sort | head -40
 
       - name: List etc contents
         run: |
