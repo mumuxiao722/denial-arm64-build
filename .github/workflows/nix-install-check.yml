@@ -156,14 +156,16 @@ jobs:
           # Existence only says a file appeared. checks.module asserts the values
           # in it; that nixpkgs read xdg.portal.config.denial at all, and wrote
           # the interface preference, is a separate thing only the build shows.
-          if grep -q '^preferred' result/etc/xdg/xdg-desktop-portal/denial-portals.conf; then
-            echo "  ok  denial-portals.conf names the preferred interfaces"
+          # nixpkgs toINI turns xdg.portal.config into a [preferred] section
+          # rather than a preferred= line, so that is the section to look for.
+          # Asserting denial winning Settings is the part that matters.
+          f=result/etc/xdg/xdg-desktop-portal/denial-portals.conf
+          if grep -q '^\[preferred\]' "$f" &&
+             grep -q 'org\.freedesktop\.impl\.portal\.Settings.*denial' "$f"; then
+            echo "  ok  denial-portals.conf prefers denial for the Settings interface"
           else
-            echo "::error::denial-portals.conf has no preferred= line"
-            # Printed because the file is the only evidence of what nixpkgs made
-            # of xdg.portal.config.denial, and run 38578043401 said only that the
-            # line was missing.
-            cat result/etc/xdg/xdg-desktop-portal/denial-portals.conf
+            echo "::error::denial-portals.conf does not prefer denial for Settings"
+            cat "$f"
             exit 1
           fi
 
