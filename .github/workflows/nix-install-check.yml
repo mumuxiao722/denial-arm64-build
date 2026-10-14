@@ -195,20 +195,41 @@ jobs:
             fi
           }
 
-          # What this module puts in the system profile. package.nix lists
-          # /share/wayland-sessions in pathsToLink, which is what makes the
-          # package's own session entry reachable from the profile.
+          # What nixos-install produces is the system profile and /etc/NIXOS.
           #
-          # Nothing under /etc is asserted. nixos-install writes the system
-          # profile and /etc/NIXOS and stops there; /etc/static and the units
-          # under /etc/systemd belong to switch-to-configuration, which is
-          # what a booted system runs. Option values are already asserted by
-          # checks.module without paying for a build.
+          # /run/current-system/sw is where environment.systemPackages ends up,
+          # and that symlink only exists once switch-to-configuration has run on
+          # a booted system, so an install target cannot be asked for it. The
+          # closure the profile points at can be: that is what a booted system
+          # would go on to link into /run/current-system/sw. Option values
+          # themselves are asserted by checks.module without paying for a build.
           check system-profile nix/var/nix/profiles/system
           check nixos-release etc/NIXOS
-          check session-entry sw/share/wayland-sessions/denial.desktop
-          check deniald sw/bin/deniald
-          check engine sw/lib/denial/flutter/lib/libflutter_engine.so
+
+          closure=$(nix path-info -r "$(readlink -f "$target/nix/var/nix/profiles/system")")
+
+          in_closure() {
+            if printf '%s\n' "$closure" | grep -q "$1"; then
+              echo "  ok  the system closure contains $1"
+            else
+              echo "::error::the system closure contains no $1"
+              fail=1
+            fi
+          }
+
+          in_closure deniald
+          in_closure 'libflutter_engine\.so'
+
+          # The session entry is a file inside the package rather than a path of
+          # its own, so it has to be looked for as a file.
+          if printf '%s\n' "$closure" | xargs -n 50 find -maxdepth 4 \
+               -path '*/share/wayland-sessions/denial.desktop' -print 2>/dev/null |
+               grep -q .; then
+            echo "  ok  the system closure carries denial.desktop"
+          else
+            echo "::error::the system closure carries no denial.desktop"
+            fail=1
+          fi
 
           [ "$fail" -eq 0 ] || exit 1
 
