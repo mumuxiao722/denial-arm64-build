@@ -65,11 +65,9 @@ python3 /path/to/denial-arm64-builder/patches/arm64-prep.py prep-checkout .
 ```
 
 请将本仓库的 `patches/` 目录与 Denial 检出目录并列放置。
-`arm64-prep.py prep-checkout` 会创建 Denial 校验所需的 ARM64 prebuilt 元数据目录，
-并改写两处指明 x86_64 的 Alpine 文件：`package-denial-apk` 按架构和摘要固定并构建的
-minirootfs，以及决定所生成包声明支持何种架构的 `arch=` 声明。打过补丁的构建系统在
-`gclient sync` 期间会再次以 `patch-deps` 参数调用同一文件，用以改写 sync 拉取的
-`DEPS`，并剔除那一条 Flutter 仅为 linux-amd64 发布的 openjdk 依赖。
+`arm64-prep.py prep-checkout` 会创建 Denial 校验所需的 ARM64 prebuilt 元数据目录。
+打过补丁的构建系统在 `gclient sync` 期间会再次以 `patch-deps` 参数调用同一文件，
+用以改写 sync 拉取的 `DEPS`，并剔除那一条 Flutter 仅为 linux-amd64 发布的 openjdk 依赖。
 
 ### 宿主依赖
 

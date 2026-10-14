@@ -71,10 +71,7 @@ python3 /path/to/denial-arm64-builder/patches/arm64-prep.py prep-checkout .
 
 Keep this repository's `patches/` directory alongside the Denial checkout.
 `arm64-prep.py prep-checkout` creates the ARM64 prebuilt metadata directories
-that Denial checks against, and retargets the two Alpine files that name
-x86_64: the minirootfs that `package-denial-apk` builds into by architecture and
-by digest, and the `arch=` declaration that determines what the resulting
-package claims to support. The patched build system invokes the same file with
+that Denial checks against. The patched build system invokes the same file with
 `patch-deps` during `gclient sync`, to rewrite the `DEPS` that sync fetches and
 drop the openjdk dependency, which Flutter publishes only for linux-amd64.
 

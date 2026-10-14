@@ -48,20 +48,21 @@ jobs:
       - uses: cachix/install-nix-action@v31
         name: Install Nix
 
-      # One build, and the image is what gets built first. trial-rootfs pulls the
-      # package in: the module puts it in environment.systemPackages and a
-      # toplevel closes over systemPackages, so Nix has to build it either way.
-      # The second command builds nothing -- the path is in the store by then --
-      # it just writes the package symlink the checks need, because inside a
-      # toplevel /bin and /lib are symlinks into the store, not a merged tree.
+      # One build. The system closure is what nixos-install installs, and it
+      # pulls the package in: the module puts it in environment.systemPackages
+      # and a toplevel closes over systemPackages, so Nix has to build it either
+      # way. The second command builds nothing -- the path is in the store by
+      # then -- it just writes the package symlink the checks need, because
+      # inside a toplevel /bin and /lib are symlinks into the store, not a
+      # merged tree.
       #
       # --print-build-logs streams every derivation's full log. Without it a
       # failure only reports its last 25 lines, which on a Rust build are
       # warnings and hide the errors above them.
-      - name: Build image and package
+      - name: Build the system to install
         run: |
           nix build .#trial-rootfs -o result --accept-flake-config --show-trace \
-            --print-build-logs --keep-failed
+            --print-build-logs
           nix build .#denial -o package
 
       # nixos-install has to mount /proc, /dev and /run inside the target before
@@ -75,25 +76,17 @@ jobs:
           sudo mkdir -p "$target"
           sudo mount -t tmpfs -o size=12G tmpfs "$target"
 
-          # The closure is what gets installed, so this is the tool that has to
-          # run. It is not necessarily on the system PATH -- our systemPackages
-          # is denial and zenity -- so look for it before failing, and list what
-          # is there instead of leaving the next person to guess.
-          installer=""
-          for candidate in result/sw/bin/nixos-install result/bin/nixos-install; do
-            if [ -x "$candidate" ]; then
-              installer="$candidate"
-              break
-            fi
-          done
-          if [ -z "$installer" ]; then
-            echo "::error::nixos-install is not in the closure under either path"
-            ls result result/sw/bin 2>/dev/null | head -40
-            exit 1
-          fi
-          echo "using $installer"
+          # nixos-install runs from an absolute path, so nothing beside it is on
+          # PATH. Two of the tools it calls are not on the system PATH either:
+          # nixos-enter from the system profile, nix-env and nix-build from the
+          # nix package. Both directories go on the end, not the front: the
+          # profile holds copies of mount, mkdir, ln and touch, and letting
+          # them come before the system's is how runner 115808398671 lost sudo.
+          # Nothing here needs to win a lookup, so last is enough.
+          nixdir="$(dirname "$(readlink -f "$(command -v nix)")")"
+          export PATH="$PATH:$nixdir:$PWD/result/sw/bin"
 
-          sudo "$installer" \
+          sudo result/sw/bin/nixos-install \
             --root "$target" \
             --system "$(readlink -f result)" \
             --no-root-passwd --no-channel-copy --no-bootloader

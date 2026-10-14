@@ -707,3 +707,33 @@ index 4d5f522..7f7dd5e 100755
    rpm) verify_rpm ;;
  esac
 +# DENIAL_ARM64_PATCHED
+diff --git a/tools/package-denial-apk b/tools/package-denial-apk
+index 6bb9819..0000000 100755
+--- a/tools/package-denial-apk
++++ b/tools/package-denial-apk
+@@ -7,10 +7,10 @@
+ 
+ readonly ALPINE_VERSION='3.24.1'
+ readonly ALPINE_BRANCH='v3.24'
+-readonly ALPINE_ARCH='x86_64'
++readonly ALPINE_ARCH='aarch64'
+ readonly MINIROOTFS_NAME="alpine-minirootfs-${ALPINE_VERSION}-${ALPINE_ARCH}.tar.gz"
+ readonly MINIROOTFS_URL="https://dl-cdn.alpinelinux.org/alpine/${ALPINE_BRANCH}/releases/${ALPINE_ARCH}/${MINIROOTFS_NAME}"
+-readonly MINIROOTFS_SHA256='41f73e3cf5fa919b8aa5ca6b30dc48f0da2720776d7423e2a7748211456fe081'
++readonly MINIROOTFS_SHA256='f55a90f69052c5bd6f92cb09a8f47065970830b194c917a006fb94028e721259'
+ 
+ fail() {
+   printf 'package-denial-apk: %s\n' "$*" >&2
+diff --git a/packaging/alpine/APKBUILD b/packaging/alpine/APKBUILD
+index 949b6e7..0000000 100644
+--- a/packaging/alpine/APKBUILD
++++ b/packaging/alpine/APKBUILD
+@@ -5,7 +5,7 @@
+ pkgrel="${DENIAL_PACKAGE_RELEASE:-0}"
+ pkgdesc="Flutter-native Wayland compositor and desktop shell"
+ url="https://github.com/denialwm/denial"
+-arch="x86_64"
++arch="x86_64 aarch64"
+ license="GPL-3.0-or-later AND CC-BY-SA-4.0 AND GPL-3.0-only AND OFL-1.1"
+ options="!check !strip !tracedeps"
+ subpackages="$pkgname-flutter-engine:_flutter_engine $pkgname-plugin-manager:_plugin_manager"
