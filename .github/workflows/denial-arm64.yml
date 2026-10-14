@@ -522,5 +522,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.denial_ref }}
-          prerelease: true
+          # Upstream Denial ships its own tags as prereleases. These are the
+          # ARM64 packages for the same upstream releases, built from a pinned
+          # revision and verified by Nix Install Check, so they are published as
+          # ordinary releases rather than carrying that label forward.
+          prerelease: false
           files: packages/*
