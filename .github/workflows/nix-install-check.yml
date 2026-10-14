@@ -171,7 +171,12 @@ jobs:
             fi
           }
 
-          check current-system run/current-system
+          # Everything here survives nixos-install exiting. Nothing under /run
+          # is asserted: nixos-install mounts its own pseudo-filesystems inside
+          # the target, and what it leaves behind afterwards is an
+          # implementation detail this file has not verified. Asserting
+          # /run/current-system would fail for reasons that have nothing to do
+          # with Denial.
           check system-profile nix/var/nix/profiles/system
           check system-link nix/var/nix/profiles/system-link
           check gcroot nix/var/nix/gcroots/current-system
@@ -179,18 +184,21 @@ jobs:
           check deniald sw/bin/deniald
           check engine sw/lib/denial/flutter/lib/libflutter_engine.so
 
-          # Reported, not asserted. Only a real boot creates this one, and the
-          # runner cannot boot. If it ever shows up, the target was booted by
-          # something and these checks are measuring a system, not an install.
-          if [ -e "$target/run/booted-system" ]; then
-            echo "  !!  run/booted-system exists; this target was booted, not installed"
-          else
-            echo "  --  run/booted-system absent, as expected without a boot"
-          fi
+          # Reported, not asserted. Both are only created by a real boot --
+          # /run/current-system by the activation, /run/booted-system by the
+          # bootloader -- and the runner cannot boot. Printed because their
+          # absence is expected and worth seeing rather than silent.
+          for path in run/current-system run/booted-system; do
+            if [ -e "$target/$path" ]; then
+              echo "  --  $path present"
+            else
+              echo "  --  $path absent, as expected without a boot"
+            fi
+          done
 
           [ "$fail" -eq 0 ] || exit 1
 
-          readlink -f "$target/run/current-system"
+          readlink -f "$target/nix/var/nix/profiles/system"
 
       - name: List etc contents
         run: |
