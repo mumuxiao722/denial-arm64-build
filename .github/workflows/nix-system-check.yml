@@ -1,4 +1,4 @@
-name: Nix System Check
+name: NixOS Switch Check
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: nix-system-check-${{ github.ref }}
+  group: nix-switch-check-${{ github.ref }}
   cancel-in-progress: false
 
 # Deliberately not a check. denial.cachix.org carries only the x86_64 engine, so
@@ -15,9 +15,11 @@ concurrency:
 # Nothing here is automatic: it runs when someone wants to know whether the
 # system still comes out of the store, not on every push.
 #
-# Builds system.build.toplevel and looks at what came out of it. It does not run
-# switch-to-configuration: that needs a running NixOS to run it on, and the
-# ARM64 runner is Ubuntu.
+# Named for the question it answers: can a real ARM64 NixOS machine install
+# Denial, by way of nixos-install or nixos-switch. A minimal NixOS image is
+# built around the package as the evidence, not as a product -- neither tool is
+# run, because that needs a running NixOS to run it on and the ARM64 runner is
+# Ubuntu.
 #
 # The output is not a deliverable. Nothing installs it, nobody ships it, and it
 # is deliberately missing a bootloader and a display manager -- a display manager
@@ -25,7 +27,7 @@ concurrency:
 # business, since nothing here touches its source.
 jobs:
   build:
-    name: Build a minimal NixOS system and check what it contains
+    name: Build a minimal NixOS image and check that nixos-install or nixos-switch can install Denial
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
@@ -46,7 +48,7 @@ jobs:
           nix build .#denial -o package --accept-flake-config --show-trace \
             --print-build-logs --keep-failed
 
-      - name: Build the minimal system around it
+      - name: Build the minimal NixOS image around it
         run: nix build .#trial-rootfs -o result --accept-flake-config --show-trace
 
       # The compositor, its engine and the session entry are what the module is
