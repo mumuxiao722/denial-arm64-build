@@ -76,17 +76,14 @@ jobs:
           sudo mkdir -p "$target"
           sudo mount -t tmpfs -o size=12G tmpfs "$target"
 
-          # nixos-install runs from an absolute path, so nothing beside it is on
-          # PATH. Two of the tools it calls are not on the system PATH either:
-          # nixos-enter from the system profile, nix-env and nix-build from the
-          # nix package. Both directories go on the end, not the front: the
-          # profile holds copies of mount, mkdir, ln and touch, and letting
-          # them come before the system's is how runner 115808398671 lost sudo.
-          # Nothing here needs to win a lookup, so last is enough.
-          nixdir="$(dirname "$(readlink -f "$(command -v nix)")")"
-          export PATH="$PATH:$nixdir:$PWD/result/sw/bin"
-
-          sudo result/sw/bin/nixos-install \
+          # nixos-install calls nixos-enter, which is only in the system profile, and
+          # runs nix-env, which the runner has on PATH through its Nix profile.
+          # Neither survives the sudo below: sudoers sets secure_path to six
+          # system directories, so everything exported here would be discarded.
+          # Passing PATH through env is what delivers it. Three runs failed here
+          # for this one reason, each time read as something else.
+          sudo env PATH="$PATH:$PWD/result/sw/bin" \
+            result/sw/bin/nixos-install \
             --root "$target" \
             --system "$(readlink -f result)" \
             --no-root-passwd --no-channel-copy --no-bootloader

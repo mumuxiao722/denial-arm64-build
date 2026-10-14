@@ -84,28 +84,13 @@ jobs:
           sudo mkdir -p "$target"
           sudo mount -t tmpfs -o size=8G tmpfs "$target"
 
-          # nixos-install runs from an absolute path, so nothing beside it is
-          # on PATH. nixos-enter is not on the system PATH either; the profile
-          # goes on the end, not the front, because it holds copies of mount,
-          # mkdir, ln and touch, and letting those come before the system's is
-          # how the real check lost sudo.
-          export PATH="$PATH:$PWD/result/sw/bin"
-
-          # nix-env cannot be located the obvious way. install-nix-action puts
-          # a wrapper on PATH rather than a symlink into the store, so resolving
-          # nix lands on the wrapper's directory, where nix-env is not.
-          echo "nix is: $(command -v nix) -> $(readlink -f "$(command -v nix)")"
-          for candidate in $(ls -d /nix/store/*-nix-*/bin 2>/dev/null | sort -V | tail -3); do
-            echo "  candidate: $candidate"
-            echo "    has: $(ls "$candidate" 2>/dev/null | tr '\n' ' ')"
-            if [ -x "$candidate/nix-env" ]; then
-              export PATH="$PATH:$candidate"
-              echo "  using $candidate"
-            fi
-          done
-          echo "nix-env is now: $(command -v nix-env || echo NOT-FOUND)"
-
-          sudo result/sw/bin/nixos-install \
+          # nixos-install calls nixos-enter, which is only in the system profile, and
+          # runs nix-env, which the runner has on PATH through its Nix profile.
+          # Neither survives the sudo below: sudoers sets secure_path to six
+          # system directories, so everything exported here would be discarded.
+          # Passing PATH through env is what delivers it.
+          sudo env PATH="$PATH:$PWD/result/sw/bin" \
+            result/sw/bin/nixos-install \
             --root "$target" \
             --system "$(readlink -f result)" \
             --no-root-passwd --no-channel-copy --no-bootloader
