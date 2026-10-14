@@ -159,7 +159,7 @@ Two workflows are provided:
 |---|---|
 | Nix Flake Check | **Evaluate the flake on AArch64** |
 |  | **Resolve the AArch64 engine hashes** — only when `refresh_engine_hashes` is set. Blanks the two hashes and resolves them again, reporting what Nix prints as `got:`. |
-| NixOS Switch Check | **Build a minimal NixOS image and check that nixos-install or nixos-switch can install Denial** |
+| NixOS Image Check | **Build a minimal NixOS image and check that nixos-install or nixos-switch can install Denial** |
 
 ### On NixOS
 
