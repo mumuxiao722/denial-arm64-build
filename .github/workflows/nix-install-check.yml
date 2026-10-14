@@ -77,9 +77,8 @@ jobs:
 
           # The closure is what gets installed, so this is the tool that has to
           # run. It is not necessarily on the system PATH -- our systemPackages
-          # is denial and zenity -- so look for it before failing, and print the
-          # help if it is missing so the log says what the options are instead of
-          # leaving the next person to guess.
+          # is denial and zenity -- so look for it before failing, and list what
+          # is there instead of leaving the next person to guess.
           installer=""
           for candidate in result/sw/bin/nixos-install result/bin/nixos-install; do
             if [ -x "$candidate" ]; then
@@ -93,12 +92,11 @@ jobs:
             exit 1
           fi
           echo "using $installer"
-          "$installer" --help || true
 
           sudo "$installer" \
             --root "$target" \
             --system "$(readlink -f result)" \
-            --no-root-passwd --no-channel --no-boot-loader
+            --no-root-passwd --no-channel-copy --no-bootloader
 
       - name: Verify build outputs
         run: |
