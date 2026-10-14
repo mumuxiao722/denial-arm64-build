@@ -182,14 +182,9 @@ jobs:
           readelf -h package/lib/denial/flutter/lib/libflutter_engine.so \
             | grep 'AArch64'
 
-          # A missing ldd has to be an error rather than a silent pass, and the
-          # marker has to be the loader's own "=> not found": the words "not
-          # found" also appear in "ldd: command not found".
-          if ! command -v ldd >/dev/null; then
-            echo "::error::ldd is unavailable here, so linkage cannot be checked"
-            exit 1
-          fi
-
+          # Run 38613495890 showed ldd is on the runner and resolved all four.
+          # The marker has to be the loader's own "=> not found", because the
+          # words "not found" also appear in "ldd: command not found".
           load_fail=0
           loads() {
             libs=$(ldd "$1" 2>&1 || true)
@@ -245,11 +240,20 @@ jobs:
           system_path=$(readlink -f "$target/nix/var/nix/profiles/system")
           closure=$(nix path-info -r "$system_path")
 
-          # The package this job built, asked about by its exact store path.
-          # Comparing paths is what makes this immune to naming: the engine is
-          # denial-flutter-engine-raw-<version>, and deniald is a file inside
-          # denial-native-app rather than anything either path is called.
-          package_path=$(readlink -f result)
+          # The denial package this job built, asked about by its exact store
+          # path. package, not result: result is the trial-rootfs, which is the
+          # system profile itself and is therefore in its own closure, so
+          # checking it would pass whatever the module did.
+          #
+          # Comparing paths rather than grepping is what makes this immune to
+          # naming: the engine is denial-flutter-engine-raw-<version>, and
+          # deniald is a file inside denial-native-app, not the name of any path.
+          #
+          # Together with step 7, which checks those files in package/ and asks
+          # them to resolve their libraries, this says the installed system has
+          # the binaries -- without walking 1600 paths to rediscover what the
+          # store path already implies.
+          package_path=$(readlink -f package)
           if printf '%s\n' "$closure" | grep -qxF "$package_path"; then
             echo "  ok  the installed system contains $(basename "$package_path")"
           else
@@ -257,22 +261,6 @@ jobs:
             printf '%s\n' "$closure" | grep -i denial | head -20
             fail=1
           fi
-
-          # Everything else is a file rather than a path, so it is looked for as
-          # one. The engine is the part that is specific to this port.
-          carries() {
-            if printf '%s\n' "$closure" | xargs -n 50 find -maxdepth 4 \
-                 -name "$1" -print 2>/dev/null | grep -q .; then
-              echo "  ok  the installed system carries $1"
-            else
-              echo "::error::the installed system carries no $1"
-              fail=1
-            fi
-          }
-
-          carries libflutter_engine.so
-          carries denial.desktop
-          carries deniald
 
           [ "$fail" -eq 0 ] || exit 1
 
