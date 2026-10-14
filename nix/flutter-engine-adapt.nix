@@ -32,7 +32,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   installPhase = ''
     runHook preInstall
     python3 ${./engine-manifest.py} verify . \
-      --source-lock ${denialSource}/prebuilt/flutter-engine/SOURCE_LOCK.json} \
+      --source-lock ${denialSource}/prebuilt/flutter-engine/SOURCE_LOCK.json \
       --nix-lock ${./flutter-engine-lock.json} --platform ${stdenv.hostPlatform.system} \
       --minimum-glibc ${rawEngine.minimumGlibc} \
       --minimum-compiler-runtime ${rawEngine.minimumCompilerRuntime} \

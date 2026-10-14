@@ -34,14 +34,14 @@ runCommand "denial-plugin-build-kit"
     mkdir -p "$HOME"
     cp -R ${src} source
     chmod -R u+w source
-    mkdir -p "$release"
-    cp "$upstreamRelease"/LICENSE.flutter "$release"/LICENSE.flutter
-    cp "$upstreamRelease"/LICENSE.third_party "$release"/LICENSE.third_party
+    mkdir -p "${release}"
+    cp "${upstreamRelease}"/LICENSE.flutter "${release}"/LICENSE.flutter
+    cp "${upstreamRelease}"/LICENSE.third_party "${release}"/LICENSE.third_party
     # The Nix engine has store-linked dependencies and therefore its own bytes.
     # Record the exact same engine that nix/dart-shell.nix installs, rather than
     # claiming it has the checksum of the separately packaged native build.
     sha256sum ${denialFlutter.engine}/out/host_release/libflutter_engine.so \
-      > "$release"/libflutter_engine.so.sha256
+      > "${release}"/libflutter_engine.so.sha256
     python3 source/tools/prepare-denial-plugin-kit \
       --source-root source \
       --source-revision ${lib.escapeShellArg sourceRevision} \
