@@ -18,7 +18,7 @@ ARM64 设备上，在满足上游宿主要求的前提下，使用该补丁集�
 
 ## 状态
 
-Denial 版本：`v0.5.0`
+Denial 版本：`v0.5.1`
 
 安装包发布在
 [Releases 页面](https://github.com/mumuxiao722/denial-arm64-builder/releases)。
@@ -58,7 +58,7 @@ sudo apk add --allow-untrusted ./denial-plugin-manager-*.apk     # 可选
 ### 应用补丁
 
 ```sh
-git clone --branch v0.5.0 https://github.com/denialwm/denial.git denial
+git clone --branch v0.5.1 https://github.com/denialwm/denial.git denial
 cd denial
 git apply /path/to/denial-arm64-builder/patches/denial-arm64.diff
 python3 /path/to/denial-arm64-builder/patches/arm64-prep.py prep-checkout .
@@ -72,10 +72,10 @@ python3 /path/to/denial-arm64-builder/patches/arm64-prep.py prep-checkout .
 ### 宿主依赖
 
 编译 Denial 所需的工具由上游文档说明，见
-[Host requirements](https://github.com/denialwm/denial/blob/v0.5.0/docs/BUILDING.md#host-requirements)，
+[Host requirements](https://github.com/denialwm/denial/blob/v0.5.1/docs/BUILDING.md#host-requirements)，
 并可由 `tools/denial-pc doctor` 检查。各发行版的打包工具分别记录于
-[Debian、Fedora 与 openSUSE](https://github.com/denialwm/denial/blob/v0.5.0/docs/BUILDING.md#debian-fedora-and-opensuse-package-adapters)
-和 [Arch](https://github.com/denialwm/denial/blob/v0.5.0/docs/packaging/arch/README.md)。
+[Debian、Fedora 与 openSUSE](https://github.com/denialwm/denial/blob/v0.5.1/docs/BUILDING.md#debian-fedora-and-opensuse-package-adapters)
+和 [Arch](https://github.com/denialwm/denial/blob/v0.5.1/docs/packaging/arch/README.md)。
 
 这两份文档未提及的有两点。
 
@@ -107,7 +107,7 @@ Denial 无法在 Alpine 上编译，但可在 Alpine 这样的 musl 系统上运
 工作流每次运行构建一个 Denial tag，由 `denial_ref` 指定：
 
 ```sh
-gh workflow run denial-arm64.yml -f denial_ref=v0.5.0
+gh workflow run denial-arm64.yml -f denial_ref=v0.5.1
 ```
 
 所有缓存键均由它派生，因此换一个版本会从空的引擎缓存开始，无需修改其他内容。
@@ -127,7 +127,7 @@ GitHub release。这些产物是构建输出，不是软件源。
 ## Nix
 
 `nix/` 是上游 Nix 打包的一份副本，在此提交，而非从 flake 输入导入。flake 固定
-Denial `v0.5.0`，并另有一个 `plugins` 输入。上游那份仅在 `x86_64-linux` 上构建，
+Denial `v0.5.1`，并另有一个 `plugins` 输入。上游那份仅在 `x86_64-linux` 上构建，
 且没有 AArch64 引擎哈希；`nix/flutter-engine-lock.json` 记录了 AArch64 构建所需的
 两个哈希，一个对应 Dart SDK，一个对应引擎源码闭包。
 

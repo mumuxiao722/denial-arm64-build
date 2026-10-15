@@ -1,10 +1,10 @@
 {
-  description = "Denial Nix packaging, pinned to upstream v0.5.0";
+  description = "Denial Nix packaging, pinned to upstream v0.5.1";
 
   inputs = {
-    # v0.5.0. A commit rather than the tag, so the reviewed text says exactly
+    # v0.5.1. A commit rather than the tag, so the reviewed text says exactly
     # what was reviewed; it is what the annotated, PGP-signed tag points at.
-    denial.url = "github:denialwm/denial/c56aa2d6e8d70bd87b279e4edd70588c7ec15a6d";
+    denial.url = "github:denialwm/denial/c96375a190a200b6343868afc42d4492b6badb9d";
 
     # A path input, not a flake. The overlay reads the taskbar plugin out of it
     # directly; upstream flake.nix:19 pins the same commit.

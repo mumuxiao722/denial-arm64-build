@@ -22,7 +22,7 @@ fedora-sheng.
 
 ## Status
 
-Denial release: `v0.5.0`
+Denial release: `v0.5.1`
 
 Packages are published on the
 [Releases page](https://github.com/mumuxiao722/denial-arm64-builder/releases).
@@ -63,7 +63,7 @@ commands are run from the root of the Denial checkout.
 ### Applying the patches
 
 ```sh
-git clone --branch v0.5.0 https://github.com/denialwm/denial.git denial
+git clone --branch v0.5.1 https://github.com/denialwm/denial.git denial
 cd denial
 git apply /path/to/denial-arm64-builder/patches/denial-arm64.diff
 python3 /path/to/denial-arm64-builder/patches/arm64-prep.py prep-checkout .
@@ -78,11 +78,11 @@ drop the openjdk dependency, which Flutter publishes only for linux-amd64.
 ### Host requirements
 
 What it takes to compile Denial is written down upstream: see
-[Host requirements](https://github.com/denialwm/denial/blob/v0.5.0/docs/BUILDING.md#host-requirements),
+[Host requirements](https://github.com/denialwm/denial/blob/v0.5.1/docs/BUILDING.md#host-requirements),
 and `tools/denial-pc doctor` checks it. Per-distribution packaging tools are
 documented under
-[Debian, Fedora and openSUSE](https://github.com/denialwm/denial/blob/v0.5.0/docs/BUILDING.md#debian-fedora-and-opensuse-package-adapters)
-and [Arch](https://github.com/denialwm/denial/blob/v0.5.0/docs/packaging/arch/README.md).
+[Debian, Fedora and openSUSE](https://github.com/denialwm/denial/blob/v0.5.1/docs/BUILDING.md#debian-fedora-and-opensuse-package-adapters)
+and [Arch](https://github.com/denialwm/denial/blob/v0.5.1/docs/packaging/arch/README.md).
 
 Two requirements are not mentioned in those documents.
 
@@ -118,7 +118,7 @@ The Denial version built by the workflow is the one named by `denial_ref`.
 The workflow builds one Denial tag per run, named with `denial_ref`:
 
 ```sh
-gh workflow run denial-arm64.yml -f denial_ref=v0.5.0
+gh workflow run denial-arm64.yml -f denial_ref=v0.5.1
 ```
 
 Every cache key derives from it, so a different version starts from a cold
@@ -142,7 +142,7 @@ repository.
 ## Nix
 
 `nix/` is a copy of upstream's Nix packaging, committed here rather than
-imported from the flake input. The flake pins Denial `v0.5.0` and a `plugins`
+imported from the flake input. The flake pins Denial `v0.5.1` and a `plugins`
 input. Upstream's copy builds on `x86_64-linux` only and carries no AArch64
 engine hash; `nix/flutter-engine-lock.json` carries both hashes an AArch64
 build requires, one for the Dart SDK and one for the engine source closure.
