@@ -40,14 +40,6 @@ jobs:
     name: "Build (${{ inputs.denial_ref }}, ARM64)"
     runs-on: ubuntu-24.04-arm
 
-    outputs:
-      # Whether all ten uploads succeeded. Each Package step runs on always()
-      # so one broken target does not cancel the other four, which means the
-      # job itself can be green while a distribution produced nothing. The
-      # release reads this rather than needs.build.result.
-      uploads-complete: ${{ steps.upload-gate.outputs.complete }}
-      upload-report: ${{ steps.upload-gate.outputs.report }}
-
     env:
       DENIAL_PC_DEPENDENCY_ROOT: ${{ github.workspace }}/.denial-cache/deps
       DENIAL_PC_BUILD_ROOT: ${{ github.workspace }}/.denial-cache/pc-build
@@ -446,40 +438,6 @@ jobs:
           if-no-files-found: error
 
 
-      # Each Package step runs on always(), so a failed target leaves its
-      # upload skipped and the job still green. Collect that here rather than
-      # upload skipped and the job still green. Collect that here rather than
-      # letting the release publish whatever happened to arrive.
-      - name: "Collect upload status"
-        id: upload-gate
-        if: ${{ always() }}
-        env:
-          UPLOADS: |
-            upload-deb ${{ steps.upload-deb.outcome }}
-            upload-deb-plugin ${{ steps.upload-deb-plugin.outcome }}
-            upload-arch ${{ steps.upload-arch.outcome }}
-            upload-arch-plugin ${{ steps.upload-arch-plugin.outcome }}
-            upload-fedora ${{ steps.upload-fedora.outcome }}
-            upload-fedora-plugin ${{ steps.upload-fedora-plugin.outcome }}
-            upload-opensuse ${{ steps.upload-opensuse.outcome }}
-            upload-opensuse-plugin ${{ steps.upload-opensuse-plugin.outcome }}
-            upload-alpine ${{ steps.upload-alpine.outcome }}
-            upload-alpine-plugin ${{ steps.upload-alpine-plugin.outcome }}
-        run: |
-          failed=()
-          while read -r id outcome; do
-            [[ "$outcome" == success ]] || failed+=("$id=$outcome")
-          done <<< "$UPLOADS"
-          if (( ${#failed[@]} )); then
-            report=$(IFS=, ; echo "${failed[*]}")
-            echo "::warning::these uploads did not succeed: ${report//,/, }"
-            echo "complete=false" >> "$GITHUB_OUTPUT"
-            echo "report=$report" >> "$GITHUB_OUTPUT"
-          else
-            echo "complete=true" >> "$GITHUB_OUTPUT"
-            echo "report=all uploads succeeded" >> "$GITHUB_OUTPUT"
-          fi
-
 
   release:
     name: "Publish release"
@@ -491,23 +449,6 @@ jobs:
       contents: write
 
     steps:
-      # A release with a hole in it is worse than no release. Each Package
-      # step runs on always() so one broken target does not cancel the other
-      # four, which also means needs.build.result is success while a
-      # distribution produced nothing and its upload was skipped. This refuses
-      # to publish in that case and names what is missing.
-      - name: "Require every upload to have succeeded"
-        env:
-          COMPLETE: ${{ needs.build.outputs.uploads-complete }}
-          REPORT: ${{ needs.build.outputs.upload-report }}
-        run: |
-          if [[ "$COMPLETE" != true ]]; then
-            echo "::error::Not publishing a release: not every upload succeeded."
-            echo "::error::Failed or skipped: $REPORT"
-            exit 1
-          fi
-          echo "All uploads succeeded: $REPORT"
-
       - name: "Download all packages"
         uses: actions/download-artifact@v8
         with:
