@@ -78,6 +78,12 @@ jobs:
           # denial-flutter-engine-source at the Dart fetch, which it reaches
           # before the Flutter one, so run 38725068882 reported <no got: line>
           # for flutter.hash and the Dart hash twice.
+          #
+          # Read off denial-flutter-framework-source, not -engine-source:
+          # flutter.hash is fetchFromGitHub's, and that feeds flutterSource,
+          # which -engine-source never references. Run 38725762483 blanked it
+          # against -engine-source and the build carried on past the fetch,
+          # printing <no got: line> with nothing wrong anywhere.
           d["flutter"]["hash"] = blank
           p.write_text(json.dumps(d, indent=2) + "\n")
           PY
@@ -86,8 +92,8 @@ jobs:
           # reasons and the one that matters is rarely the last line. The full
           # output used to go to an artifact, which meant the evidence was one
           # click away and a week from expiring; here it is just in the log.
-          nix build ".#denial-flutter-engine-source" --no-link 2>&1 | tail -40
-          for pair in "flutter.hash:denial-flutter-engine-source"; do
+          nix build ".#denial-flutter-framework-source" --no-link 2>&1 | tail -40
+          for pair in "flutter.hash:denial-flutter-framework-source"; do
             key="${pair%%:*}"
             attr="${pair##*:}"
             got="$(nix build ".#$attr" --no-link 2>&1 \
