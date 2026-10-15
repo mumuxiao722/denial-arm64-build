@@ -440,32 +440,51 @@ jobs:
 
 
   release:
-    name: "Publish release"
+    name: Publish release
     needs: build
-    runs-on: ubuntu-24.04-arm
+    # Nothing is built here. The artifact archives are fetched and uploaded,
+    # and an x86_64 runner is both cheaper and always available where the ARM
+    # ones are scarce.
+    runs-on: ubuntu-latest
     if: ${{ inputs.publish_release }}
 
     permissions:
       contents: write
 
     steps:
-      - name: "Download all packages"
-        uses: actions/download-artifact@v8
-        with:
-          pattern: denial-*-arm64
-          path: packages
-          merge-multiple: true
+      # The artifact archives go on the release as they are, one zip per
+      # artifact.
+      #
+      # They used to be downloaded and flattened into one directory, which
+      # silently lost packages: the Fedora and openSUSE RPMs are built to the
+      # same filename, so merging the two artifacts left one of them
+      # overwritten with nothing saying so. The archives are named apart, so
+      # shipping them apart is what keeps both.
+      - name: Fetch the build's artifact archives
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p archives
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/${{ github.run_id }}/artifacts" \
+            --paginate --jq '.artifacts[] | select(.name | startswith("denial-")) | [.id, .name] | @tsv' \
+            > archives/index.tsv
+          count=$(wc -l < archives/index.tsv)
+          echo "artifacts: $count"
+          if (( count == 0 )); then
+            echo "::error::the build produced no artifacts"
+            exit 1
+          fi
+          while IFS=$'\t' read -r id name; do
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" \
+              > "archives/$name.zip"
+            printf '%10d  %s\n' "$(stat -c%s "archives/$name.zip")" "$name.zip"
+          done < archives/index.tsv
+          rm archives/index.tsv
 
-      - name: "List packages"
-        run: find packages -type f | sort
-
-      - name: "Publish GitHub release"
+      - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.denial_ref }}
-          # Upstream Denial ships its own tags as prereleases. These are the
-          # ARM64 packages for the same upstream releases, built from a pinned
-          # revision and verified by Nix Install Check, so they are published as
-          # ordinary releases rather than carrying that label forward.
           prerelease: false
-          files: packages/*
+          files: archives/*.zip
