@@ -202,10 +202,10 @@ Denial `v0.5.1`，并另有一个 `plugins` 输入。上游那份仅在 `x86_64-
         modules = [
           {
             nixpkgs.overlays = [ denial.overlays.default ];
-            environment.systemPackages = [
-              pkgs.denial
-              pkgs.denialPluginManager
-            ];
+              environment.systemPackages = [
+                pkgs.denial
+                pkgs.denialPluginManager # 可选
+              ];
           }
         ];
       };

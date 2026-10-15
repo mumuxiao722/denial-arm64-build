@@ -206,7 +206,7 @@ that can only miss costs a lookup on every path.
 ### On non-NixOS with the Nix package manager
 
 Declare the flake input in the Nix configuration. The overlay provides
-`denial` and `denialPluginManager`:
+`denial`, and `denialPluginManager` for Denial's plugin tooling:
 
 ```nix
 {
@@ -220,10 +220,10 @@ Declare the flake input in the Nix configuration. The overlay provides
         modules = [
           {
             nixpkgs.overlays = [ denial.overlays.default ];
-            environment.systemPackages = [
-              pkgs.denial
-              pkgs.denialPluginManager
-            ];
+              environment.systemPackages = [
+                pkgs.denial
+                pkgs.denialPluginManager # optional
+              ];
           }
         ];
       };
