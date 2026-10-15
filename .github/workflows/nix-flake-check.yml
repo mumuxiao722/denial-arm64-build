@@ -74,24 +74,20 @@ jobs:
           p.write_text(json.dumps(d, indent=2) + "\n")
           PY
           set +e
+          # 40 lines rather than 4: hash resolution fails for a handful of
+          # reasons and the one that matters is rarely the last line. The full
+          # output used to go to an artifact, which meant the evidence was one
+          # click away and a week from expiring; here it is just in the log.
           for attr in denial-flutter-dart denial-flutter-engine-source; do
             echo "=== $attr ==="
-            nix build ".#$attr" --no-link 2>&1 | tee "/tmp/$attr.log" | tail -4
+            nix build ".#$attr" --no-link 2>&1 | tail -40
           done
           for pair in \
             "dart.hash_aarch64:denial-flutter-dart" \
             "engine.source_hash_aarch64:denial-flutter-engine-source"; do
             key="${pair%%:*}"
             attr="${pair##*:}"
-            got="$(sed -n 's/.*got: *//p' "/tmp/$attr.log" | head -1)"
+            got="$(nix build ".#$attr" --no-link 2>&1 \
+              | sed -n 's/.*got: *//p' | head -1)"
             printf '%-28s %s\n' "$key" "${got:-<no got: line>}"
           done
-
-      - uses: actions/upload-artifact@v7
-        name: Upload the build logs
-        if: always()
-        with:
-          name: aarch64-engine-hashes
-          path: /tmp/denial-flutter-*.log
-          if-no-files-found: warn
-          retention-days: 7
