@@ -57,10 +57,15 @@ jobs:
       - uses: cachix/install-nix-action@v31
         name: Install Nix
 
-      # Blanking the two keys puts the placeholders back, so both builds fail at
+      # Blanking the keys puts the placeholders back, so each build fails at
       # the fetch and Nix prints the real hash as `got:`. The fetch never
       # completes, so no compiler runs. Same trick as upstream's
       # tools/denial-nix refresh-engine-lock.
+      #
+      # flutter.hash is resolved here too even though nothing builds x86_64
+      # here. It is a fixed-output derivation's hash, which Nix checks while
+      # evaluating, so a stale one stops the whole flake before a single
+      # derivation is built. Run 38724340049 died on it.
       - name: Blank the hashes and resolve them again
         run: |
           set -euo pipefail
@@ -69,8 +74,8 @@ jobs:
           blank = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
           p = pathlib.Path("nix/flutter-engine-lock.json")
           d = json.loads(p.read_text(), object_pairs_hook=collections.OrderedDict)
+          d["flutter"]["hash"] = blank
           d["dart"]["hash_aarch64"] = blank
-          d["engine"]["source_hash_aarch64"] = blank
           p.write_text(json.dumps(d, indent=2) + "\n")
           PY
           set +e
@@ -78,13 +83,13 @@ jobs:
           # reasons and the one that matters is rarely the last line. The full
           # output used to go to an artifact, which meant the evidence was one
           # click away and a week from expiring; here it is just in the log.
-          for attr in denial-flutter-dart denial-flutter-engine-source; do
+          for attr in denial-flutter-engine-source denial-flutter-dart; do
             echo "=== $attr ==="
             nix build ".#$attr" --no-link 2>&1 | tail -40
           done
           for pair in \
-            "dart.hash_aarch64:denial-flutter-dart" \
-            "engine.source_hash_aarch64:denial-flutter-engine-source"; do
+            "flutter.hash:denial-flutter-engine-source" \
+            "dart.hash_aarch64:denial-flutter-dart"; do
             key="${pair%%:*}"
             attr="${pair##*:}"
             got="$(nix build ".#$attr" --no-link 2>&1 \
